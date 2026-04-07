@@ -281,7 +281,12 @@ public class GirisEkrani {
                     hata.initOwner(stage);
                     hata.setTitle("Güncelleme Hatası");
                     hata.setHeaderText("Güncelleme başarısız oldu.");
-                    hata.setContentText(e.getMessage());
+                    String mesaj = e.getMessage();
+                    if (mesaj == null || mesaj.isBlank()) {
+                        mesaj = e.getClass().getSimpleName()
+                                + " — Loglara bakın (AppData/Local/MarketPOS/audit.log)";
+                    }
+                    hata.setContentText(mesaj);
                     hata.showAndWait();
                 });
             }

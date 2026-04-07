@@ -6,9 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
+import java.net.URLDecoder;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -118,28 +117,69 @@ public class GuncellemeService {
         Files.createDirectories(GUNCELLEME_KLASORU);
         Path yeniJar = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
 
-        // --- İndirme ---
-        HttpURLConnection baglanti = (HttpURLConnection) new URL(indirmeUrl).openConnection();
-        baglanti.setRequestProperty("User-Agent", "MarketPOS/" + MEVCUT_SURUM);
-        baglanti.setConnectTimeout(10_000);
-        baglanti.setReadTimeout(120_000);
+        // HttpClient: redirect'leri otomatik takip eder (GitHub → CDN arası yönlendirme)
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.ALWAYS)
+                .connectTimeout(Duration.ofSeconds(15))
+                .build();
 
-        long toplamBoyut = baglanti.getContentLengthLong();
-        long indirildi   = 0;
+        // Önce HEAD ile dosya boyutunu al (progress bar için)
+        long toplamBoyut = -1;
+        try {
+            HttpRequest headIstek = HttpRequest.newBuilder()
+                    .uri(URI.create(indirmeUrl))
+                    .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                    .header("User-Agent", "MarketPOS/" + MEVCUT_SURUM)
+                    .timeout(Duration.ofSeconds(10))
+                    .build();
+            HttpResponse<Void> headYanit = client.send(headIstek,
+                    HttpResponse.BodyHandlers.discarding());
+            toplamBoyut = headYanit.headers()
+                    .firstValueAsLong("content-length").orElse(-1);
+        } catch (Exception ignored) {}
 
-        try (InputStream is = new BufferedInputStream(baglanti.getInputStream());
+        // Gerçek indirme — InputStream olarak al, elle oku (progress takibi)
+        HttpRequest getIstek = HttpRequest.newBuilder()
+                .uri(URI.create(indirmeUrl))
+                .header("User-Agent", "MarketPOS/" + MEVCUT_SURUM)
+                .header("Accept", "application/octet-stream")
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        HttpResponse<InputStream> yanit = client.send(getIstek,
+                HttpResponse.BodyHandlers.ofInputStream());
+
+        int httpKod = yanit.statusCode();
+        if (httpKod != 200) {
+            throw new IOException("GitHub indirme hatası: HTTP " + httpKod
+                    + " — URL: " + indirmeUrl);
+        }
+
+        // Content-Length HEAD'den gelemediyse GET response header'ından dene
+        if (toplamBoyut <= 0) {
+            toplamBoyut = yanit.headers()
+                    .firstValueAsLong("content-length").orElse(-1);
+        }
+
+        long indirildi = 0;
+        try (InputStream is  = new BufferedInputStream(yanit.body());
              OutputStream os = Files.newOutputStream(yeniJar,
                      StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
 
             byte[] buffer = new byte[16_384];
             int okunan;
+            final long toplamFinal = toplamBoyut;
             while ((okunan = is.read(buffer)) != -1) {
                 os.write(buffer, 0, okunan);
                 indirildi += okunan;
-                if (toplamBoyut > 0 && ilerlemeCB != null) {
-                    ilerlemeCB.accept(indirildi * 100 / toplamBoyut); // 0–100
+                if (toplamFinal > 0 && ilerlemeCB != null) {
+                    ilerlemeCB.accept(indirildi * 100 / toplamFinal); // 0–100
                 }
             }
+        }
+
+        if (indirildi == 0) {
+            throw new IOException("İndirilen dosya boş! URL erişilebilir değil olabilir.");
         }
 
         log.info("[GÜNCELLEME] İndirme tamamlandı: {} byte", indirildi);
@@ -186,18 +226,56 @@ public class GuncellemeService {
     // Yardımcı metodlar
     // =========================================================
 
-    /** Çalışan JAR'ın tam dosya yolunu döndürür. IDE'den çalışıyorsa null. */
-    private static Path mevcutJarYoluBul() {
+    /**
+     * Çalışan JAR'ın tam dosya yolunu döndürür. IDE'den çalışıyorsa null.
+     *
+     * Spring Boot fat JAR'da getCodeSource().getLocation() şu formatta gelir:
+     *   jar:file:/C:/path/to/app.jar!/BOOT-INF/classes/
+     * Bunu parse ederek dış JAR yolunu döndürürüz.
+     */
+    static Path mevcutJarYoluBul() {
+        // 1. Yöntem: CodeSource location — hem düz JAR hem Spring Boot fat JAR için
         try {
-            var uri = GuncellemeService.class
+            var location = GuncellemeService.class
                     .getProtectionDomain()
                     .getCodeSource()
-                    .getLocation()
-                    .toURI();
-            Path p = Paths.get(uri);
-            if (p.toString().toLowerCase().endsWith(".jar")) return p;
+                    .getLocation();
+            String urlStr = location.toString();
+
+            if (urlStr.startsWith("jar:file:")) {
+                // Spring Boot fat JAR: "jar:file:/C:/path/app.jar!/BOOT-INF/classes/"
+                String yol = urlStr.substring("jar:file:".length());
+                int bang = yol.indexOf("!/");
+                if (bang > 0) yol = yol.substring(0, bang);
+                yol = URLDecoder.decode(yol, StandardCharsets.UTF_8);
+                // Windows'ta başındaki / kaldır: /C:/Users → C:/Users
+                if (yol.startsWith("/") && yol.length() > 2 && yol.charAt(2) == ':') {
+                    yol = yol.substring(1);
+                }
+                Path p = Paths.get(yol);
+                if (Files.exists(p)) return p;
+
+            } else if (urlStr.startsWith("file:")) {
+                // Düz JAR: "file:/C:/path/app.jar"
+                Path p = Paths.get(location.toURI());
+                if (p.toString().toLowerCase().endsWith(".jar") && Files.exists(p)) return p;
+            }
         } catch (Exception ignored) {}
-        return null;
+
+        // 2. Yöntem: ProcessHandle — process argümanlarında .jar ara
+        try {
+            var args = ProcessHandle.current().info().arguments();
+            if (args.isPresent()) {
+                for (String arg : args.get()) {
+                    if (arg.toLowerCase().endsWith(".jar")) {
+                        Path p = Paths.get(arg);
+                        if (Files.exists(p)) return p;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return null; // IDE'den çalışıyor
     }
 
     /**
