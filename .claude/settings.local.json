@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"C:\\\\Users\\\\EMİRHAN ÖZER\\\\Desktop\\\\pos\\\\pos\\\\src\\\\main\\\\java\\\\com\\\\market\\\\pos\"/**/*.java)",
+      "Bash(export JAVA_HOME=\"/c/Users/EMİRHAN ÖZER/.jdks/temurin-21.0.8\")",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(mvn clean:*)",
+      "Bash(mvn compile:*)",
+      "Bash(JAVA_HOME=\"C:/Users/EMİRHAN ÖZER/.jdks/temurin-21.0.8\" mvn clean package -DskipTests)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)",
+      "Bash(xargs cat:*)",
+      "Bash(JAVA_HOME=\"C:/Users/EMİRHAN ÖZER/.jdks/temurin-21.0.8\" JWT_SECRET=test123456789012345678901234567890 mvn spring-boot:run -Dspring-boot.run.jvmArguments=\"-Djava.awt.headless=true\")",
+      "Bash(kill %1)"
+    ]
+  }
+}
