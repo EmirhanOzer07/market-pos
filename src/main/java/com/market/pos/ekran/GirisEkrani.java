@@ -11,6 +11,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Base64;
@@ -275,21 +277,20 @@ public class GirisEkrani {
                 });
 
             } catch (Exception e) {
-                // Log dosyasına yaz — dialog gösterilmeden önce kayıt altına al
-                GuncellemeService.guncellemeyiLogla("HATA: " + e.getClass().getName()
-                        + " — " + e.getMessage());
-                if (e.getCause() != null) {
-                    GuncellemeService.guncellemeyiLogla("NEDEN: " + e.getCause().getMessage());
-                }
+                StringWriter sw = new StringWriter();
+                e.printStackTrace(new PrintWriter(sw));
+                String stackTrace = sw.toString();
 
-                // Stack trace'i de logla
-                java.io.StringWriter sw = new java.io.StringWriter();
-                e.printStackTrace(new java.io.PrintWriter(sw));
-                GuncellemeService.guncellemeyiLogla("STACK:\n" + sw);
+                GuncellemeService.guncellemeyiLogla("=== HATA ===");
+                GuncellemeService.guncellemeyiLogla("toString: " + e);
+                GuncellemeService.guncellemeyiLogla("Stack:\n" + stackTrace);
+
+                System.err.println("[GÜNCELLEME HATA] " + e);
+                e.printStackTrace();
 
                 Platform.runLater(() -> {
                     dialog.close();
-                    guncellemeHataDiyaloguGoster(e);
+                    guncellemeHataDiyaloguGoster(e.toString(), stackTrace);
                 });
             }
         }, "guncelleme-indir").start();
@@ -297,30 +298,34 @@ public class GirisEkrani {
         dialog.showAndWait();
     }
 
-    /** Alert.setContentText() uzun metinleri kesiyor — TextArea ile özel dialog. */
-    private void guncellemeHataDiyaloguGoster(Exception e) {
-        String mesaj = e.getClass().getSimpleName() + ": "
-                + (e.getMessage() != null ? e.getMessage() : "(mesaj yok)");
-        if (e.getCause() != null && e.getCause().getMessage() != null) {
-            mesaj += "\nNeden: " + e.getCause().getMessage();
-        }
-        mesaj += "\n\nDetay log: AppData/Local/MarketPOS/guncelleme/guncelleme.log";
+    private void guncellemeHataDiyaloguGoster(String hataStr, String stackTrace) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.initOwner(stage);
+        alert.setResizable(true);
+        alert.setTitle("Güncelleme Hatası");
+        alert.setHeaderText("Güncelleme başarısız.");
+        alert.setContentText(hataStr);
 
-        TextArea ta = new TextArea(mesaj);
+        // Expandable stack trace alanı
+        TextArea ta = new TextArea(hataStr + "\n\n" + stackTrace
+                + "\nLog: AppData/Local/MarketPOS/guncelleme/guncelleme.log");
         ta.setEditable(false);
         ta.setWrapText(true);
-        ta.setPrefRowCount(6);
-        ta.setPrefWidth(460);
+        ta.setMaxWidth(Double.MAX_VALUE);
+        ta.setMaxHeight(Double.MAX_VALUE);
+        GridPane.setVgrow(ta, Priority.ALWAYS);
+        GridPane.setHgrow(ta, Priority.ALWAYS);
 
-        Dialog<Void> hataDlg = new Dialog<>();
-        hataDlg.initOwner(stage);
-        hataDlg.setTitle("Güncelleme Hatası");
-        hataDlg.setHeaderText("Güncelleme sırasında hata oluştu.");
-        hataDlg.getDialogPane().setContent(ta);
-        hataDlg.getDialogPane().getButtonTypes().add(ButtonType.OK);
-        hataDlg.getDialogPane().setMinWidth(480);
-        hataDlg.getDialogPane().setMinHeight(220);
-        hataDlg.showAndWait();
+        GridPane detay = new GridPane();
+        detay.setMaxWidth(Double.MAX_VALUE);
+        detay.add(new Label("Detay:"), 0, 0);
+        detay.add(ta, 0, 1);
+
+        alert.getDialogPane().setExpandableContent(detay);
+        alert.getDialogPane().setExpanded(true);
+        alert.getDialogPane().setMinWidth(500);
+        alert.getDialogPane().setMinHeight(300);
+        alert.showAndWait();
     }
 
     // ===== KAYITLI GİRİŞ YARDIMCI METODLARI =====

@@ -72,12 +72,17 @@ public class GuncellemeService {
             HttpResponse<String> yanit = client.send(istek,
                     HttpResponse.BodyHandlers.ofString());
 
+            guncellemeyiLogla("GitHub API HTTP " + yanit.statusCode()
+                    + " — URL: " + GITHUB_API_URL);
+            guncellemeyiLogla("GitHub API Response:\n" + yanit.body());
+
             if (yanit.statusCode() != 200) return null;
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode kok = mapper.readTree(yanit.body());
 
             String yeniSurum = kok.get("tag_name").asText("").replaceFirst("^v", "");
+            guncellemeyiLogla("Mevcut sürüm: " + MEVCUT_SURUM + " | GitHub sürümü: " + yeniSurum);
             if (yeniSurum.isBlank() || !surumDahaYeni(yeniSurum, MEVCUT_SURUM)) return null;
 
             // Assets içinden .jar dosyasını bul
@@ -178,8 +183,11 @@ public class GuncellemeService {
             }
         }
 
+        guncellemeyiLogla("İndirme URL: " + indirmeUrl);
+        guncellemeyiLogla("İndirilen boyut: " + indirildi + " byte | Beklenen: " + toplamBoyut);
+
         if (indirildi == 0) {
-            throw new IOException("İndirilen dosya boş! URL erişilebilir değil olabilir.");
+            throw new IOException("İndirilen dosya boş (0 byte)! URL: " + indirmeUrl);
         }
 
         log.info("[GÜNCELLEME] İndirme tamamlandı: {} byte", indirildi);
