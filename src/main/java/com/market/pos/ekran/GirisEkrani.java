@@ -269,8 +269,10 @@ public class GirisEkrani {
                     Alert bitti = new Alert(Alert.AlertType.INFORMATION);
                     bitti.initOwner(stage);
                     bitti.setTitle("Güncelleme Tamamlandı");
-                    bitti.setHeaderText(null);
-                    bitti.setContentText("Güncelleme indirildi. Uygulama şimdi yeniden başlayacak.");
+                    bitti.setHeaderText("Güncelleme başarıyla tamamlandı!");
+                    bitti.setContentText("Yeni sürüm yüklendi.\nUygulama yeniden başlatılıyor...");
+                    bitti.getDialogPane().setMinWidth(380);
+                    bitti.setResizable(true);
                     bitti.showAndWait();
                     Platform.exit();
                     System.exit(0);

@@ -215,17 +215,17 @@ public class GuncellemeService {
 
         String yeniJarYolu = yeniJar.toAbsolutePath().toString();
         String eskiJarYolu = mevcutJar.getAbsolutePath();
+        String logYolu     = GUNCELLEME_KLASORU.resolve("guncelle.log").toString();
 
+        // Bat sadece kopyalar — yeniden başlatma Java'dan yapılır (ProcessBuilder)
+        // Böylece restart bat'ın şifreli/kilitli path sorunlarından bağımsız
         String bat = "@echo off\r\n"
-                + "timeout /t 3 /nobreak >nul\r\n"
+                + "timeout /t 5 /nobreak >nul\r\n"
                 + "copy /y \"" + yeniJarYolu + "\" \"" + eskiJarYolu + "\"\r\n"
                 + "if errorlevel 1 (\r\n"
-                + "  echo HATA: Kopyalama basarisiz >> \""
-                +     GUNCELLEME_KLASORU.resolve("guncelle.log") + "\"\r\n"
+                + "  echo " + timestamp() + " HATA: Kopyalama basarisiz >> \"" + logYolu + "\"\r\n"
                 + ") else (\r\n"
-                + "  echo Guncelleme basarili >> \""
-                +     GUNCELLEME_KLASORU.resolve("guncelle.log") + "\"\r\n"
-                + (launcher != null ? "  start \"\" \"" + launcher + "\"\r\n" : "")
+                + "  echo " + timestamp() + " Kopyalama basarili >> \"" + logYolu + "\"\r\n"
                 + ")\r\n"
                 + "del \"" + yeniJarYolu + "\"\r\n"
                 + "del \"%~f0\"\r\n";
@@ -233,10 +233,21 @@ public class GuncellemeService {
         Files.writeString(betik, bat, StandardCharsets.UTF_8);
         guncellemeyiLogla("Betik yazıldı: " + betik);
 
+        // 1. Kopyalama betiğini başlat (arka planda, bağımsız process)
         new ProcessBuilder("cmd.exe", "/c", betik.toAbsolutePath().toString()).start();
+        guncellemeyiLogla("Kopyalama betiği başlatıldı");
 
-        guncellemeyiLogla("Betik başlatıldı, çıkılıyor...");
-        log.info("[GÜNCELLEME] Güncelleme betiği başlatıldı. Uygulama kapatılıyor...");
+        // 2. Yeni uygulama örneğini ProcessBuilder ile başlat
+        String exeYolu = ProcessHandle.current().info().command().orElse(null);
+        guncellemeyiLogla("Yeniden başlatma — exe: " + exeYolu);
+        if (exeYolu != null && !exeYolu.toLowerCase().contains("java")) {
+            new ProcessBuilder(exeYolu).start();
+            guncellemeyiLogla("Yeni örnek başlatıldı: " + exeYolu);
+        } else {
+            guncellemeyiLogla("UYARI: exe yolu java içeriyor veya null — yeniden başlatma atlandı");
+        }
+
+        log.info("[GÜNCELLEME] Güncelleme betiği ve yeni örnek başlatıldı. Çıkılıyor...");
     }
 
     /** Güncelleme işlemlerini AppData/Local/MarketPOS/guncelleme/guncelleme.log'a yazar. */
@@ -296,6 +307,11 @@ public class GuncellemeService {
             }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    private static String timestamp() {
+        return java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
     }
 
     /** "1.1.0" > "1.0.5" → true gibi semantik sürüm karşılaştırması. */
