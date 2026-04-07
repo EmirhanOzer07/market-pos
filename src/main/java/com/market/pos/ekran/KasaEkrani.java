@@ -76,7 +76,7 @@ public class KasaEkrani {
     public Scene olustur() {
 
         // ===== ÜST BAR =====
-        Label baslikLabel = new Label("🏪 EXPRESS SATIŞ");
+        Label baslikLabel = new Label("🏪 EXPRESS SATIŞ EKRANI v1.1.0");
         baslikLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         baslikLabel.setTextFill(Color.WHITE);
 
