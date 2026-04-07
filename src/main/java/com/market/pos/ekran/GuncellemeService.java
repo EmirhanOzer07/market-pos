@@ -217,37 +217,50 @@ public class GuncellemeService {
         String eskiJarYolu = mevcutJar.getAbsolutePath();
         String logYolu     = GUNCELLEME_KLASORU.resolve("guncelle.log").toString();
 
-        // Bat sadece kopyalar — yeniden başlatma Java'dan yapılır (ProcessBuilder)
-        // Böylece restart bat'ın şifreli/kilitli path sorunlarından bağımsız
+        // Yeniden başlatma için exe yolunu al
+        String exeYolu = ProcessHandle.current().info().command().orElse(null);
+        guncellemeyiLogla("Restart exe yolu: " + exeYolu);
+
+        if (exeYolu == null || exeYolu.toLowerCase().contains("java")) {
+            throw new IOException(
+                    "Yeniden başlatma için exe yolu belirlenemedi: " + exeYolu
+                    + "\nBu hata geliştirme ortamında normaldir.");
+        }
+
+        // Bat: kopyala → portu temizle → yeni örneği başlat
+        // Java sadece System.exit(0) yapacak — bat her şeyi halleder
         String bat = "@echo off\r\n"
+                // 1. Eski JVM'in kapanmasını bekle (port + JAR kilidi bırakılsın)
                 + "timeout /t 5 /nobreak >nul\r\n"
+                // 2. Yeni JAR'ı kopyala
                 + "copy /y \"" + yeniJarYolu + "\" \"" + eskiJarYolu + "\"\r\n"
                 + "if errorlevel 1 (\r\n"
                 + "  echo " + timestamp() + " HATA: Kopyalama basarisiz >> \"" + logYolu + "\"\r\n"
+                + "  goto cleanup\r\n"
                 + ") else (\r\n"
                 + "  echo " + timestamp() + " Kopyalama basarili >> \"" + logYolu + "\"\r\n"
                 + ")\r\n"
-                + "del \"" + yeniJarYolu + "\"\r\n"
+                // 3. Kalan MarketPOS prosesini temizle
+                + "taskkill /F /IM MarketPOS.exe /T 2>nul\r\n"
+                + "timeout /t 3 /nobreak >nul\r\n"
+                // 4. Port 8080'i dinleyen prosesi bul ve öldür
+                + "for /f \"tokens=5\" %%a in ('netstat -ano ^| findstr :8080') do (\r\n"
+                + "  taskkill /F /PID %%a 2>nul\r\n"
+                + ")\r\n"
+                + "timeout /t 2 /nobreak >nul\r\n"
+                // 5. Yeni örneği başlat
+                + "start \"\" \"" + exeYolu + "\"\r\n"
+                + "echo " + timestamp() + " Uygulama baslatildi >> \"" + logYolu + "\"\r\n"
+                + ":cleanup\r\n"
+                + "del \"" + yeniJarYolu + "\" 2>nul\r\n"
                 + "del \"%~f0\"\r\n";
 
         Files.writeString(betik, bat, StandardCharsets.UTF_8);
-        guncellemeyiLogla("Betik yazıldı: " + betik);
+        guncellemeyiLogla("Betik yazıldı:\n" + bat);
 
-        // 1. Kopyalama betiğini başlat (arka planda, bağımsız process)
         new ProcessBuilder("cmd.exe", "/c", betik.toAbsolutePath().toString()).start();
-        guncellemeyiLogla("Kopyalama betiği başlatıldı");
-
-        // 2. Yeni uygulama örneğini ProcessBuilder ile başlat
-        String exeYolu = ProcessHandle.current().info().command().orElse(null);
-        guncellemeyiLogla("Yeniden başlatma — exe: " + exeYolu);
-        if (exeYolu != null && !exeYolu.toLowerCase().contains("java")) {
-            new ProcessBuilder(exeYolu).start();
-            guncellemeyiLogla("Yeni örnek başlatıldı: " + exeYolu);
-        } else {
-            guncellemeyiLogla("UYARI: exe yolu java içeriyor veya null — yeniden başlatma atlandı");
-        }
-
-        log.info("[GÜNCELLEME] Güncelleme betiği ve yeni örnek başlatıldı. Çıkılıyor...");
+        guncellemeyiLogla("Betik başlatıldı — Java şimdi kapanıyor...");
+        log.info("[GÜNCELLEME] Güncelleme betiği başlatıldı. Uygulama kapanıyor...");
     }
 
     /** Güncelleme işlemlerini AppData/Local/MarketPOS/guncelleme/guncelleme.log'a yazar. */
