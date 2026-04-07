@@ -275,24 +275,52 @@ public class GirisEkrani {
                 });
 
             } catch (Exception e) {
+                // Log dosyasına yaz — dialog gösterilmeden önce kayıt altına al
+                GuncellemeService.guncellemeyiLogla("HATA: " + e.getClass().getName()
+                        + " — " + e.getMessage());
+                if (e.getCause() != null) {
+                    GuncellemeService.guncellemeyiLogla("NEDEN: " + e.getCause().getMessage());
+                }
+
+                // Stack trace'i de logla
+                java.io.StringWriter sw = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(sw));
+                GuncellemeService.guncellemeyiLogla("STACK:\n" + sw);
+
                 Platform.runLater(() -> {
                     dialog.close();
-                    Alert hata = new Alert(Alert.AlertType.ERROR);
-                    hata.initOwner(stage);
-                    hata.setTitle("Güncelleme Hatası");
-                    hata.setHeaderText("Güncelleme başarısız oldu.");
-                    String mesaj = e.getMessage();
-                    if (mesaj == null || mesaj.isBlank()) {
-                        mesaj = e.getClass().getSimpleName()
-                                + " — Loglara bakın (AppData/Local/MarketPOS/audit.log)";
-                    }
-                    hata.setContentText(mesaj);
-                    hata.showAndWait();
+                    guncellemeHataDiyaloguGoster(e);
                 });
             }
         }, "guncelleme-indir").start();
 
         dialog.showAndWait();
+    }
+
+    /** Alert.setContentText() uzun metinleri kesiyor — TextArea ile özel dialog. */
+    private void guncellemeHataDiyaloguGoster(Exception e) {
+        String mesaj = e.getClass().getSimpleName() + ": "
+                + (e.getMessage() != null ? e.getMessage() : "(mesaj yok)");
+        if (e.getCause() != null && e.getCause().getMessage() != null) {
+            mesaj += "\nNeden: " + e.getCause().getMessage();
+        }
+        mesaj += "\n\nDetay log: AppData/Local/MarketPOS/guncelleme/guncelleme.log";
+
+        TextArea ta = new TextArea(mesaj);
+        ta.setEditable(false);
+        ta.setWrapText(true);
+        ta.setPrefRowCount(6);
+        ta.setPrefWidth(460);
+
+        Dialog<Void> hataDlg = new Dialog<>();
+        hataDlg.initOwner(stage);
+        hataDlg.setTitle("Güncelleme Hatası");
+        hataDlg.setHeaderText("Güncelleme sırasında hata oluştu.");
+        hataDlg.getDialogPane().setContent(ta);
+        hataDlg.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        hataDlg.getDialogPane().setMinWidth(480);
+        hataDlg.getDialogPane().setMinHeight(220);
+        hataDlg.showAndWait();
     }
 
     // ===== KAYITLI GİRİŞ YARDIMCI METODLARI =====

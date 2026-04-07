@@ -195,31 +195,62 @@ public class GuncellemeService {
         String launcher = launcherYoluBul();
         Path betik      = GUNCELLEME_KLASORU.resolve("guncelle.bat");
 
-        if (mevcutJar == null) {
-            throw new IOException(
-                    "Mevcut JAR konumu belirlenemedi. " +
-                    "Geliştirme ortamında güncelleme uygulanamaz.");
+        guncellemeyiLogla("guncellemeUygula() çağrıldı");
+        guncellemeyiLogla("mevcutJar = " + mevcutJar);
+        guncellemeyiLogla("launcher  = " + launcher);
+        guncellemeyiLogla("yeniJar   = " + yeniJar + " | exists=" + Files.exists(yeniJar));
+
+        if (!Files.exists(yeniJar)) {
+            throw new IOException("İndirilen JAR bulunamadı: " + yeniJar);
         }
 
-        String yeniJarYolu  = yeniJar.toAbsolutePath().toString();
-        String eskiJarYolu  = mevcutJar.toAbsolutePath().toString();
+        if (mevcutJar == null) {
+            throw new IOException(
+                    "Mevcut JAR konumu belirlenemedi.\n" +
+                    "CodeSource: " + GuncellemeService.class
+                            .getProtectionDomain().getCodeSource().getLocation() + "\n" +
+                    "Bu hata geliştirme ortamında (IDE/mvn) normaldir.\n" +
+                    "Paketlenmiş kurulum dosyasında çalışmaz.");
+        }
+
+        String yeniJarYolu = yeniJar.toAbsolutePath().toString();
+        String eskiJarYolu = mevcutJar.toAbsolutePath().toString();
 
         String bat = "@echo off\r\n"
                 + "timeout /t 3 /nobreak >nul\r\n"
                 + "copy /y \"" + yeniJarYolu + "\" \"" + eskiJarYolu + "\"\r\n"
-                + (launcher != null
-                        ? "start \"\" \"" + launcher + "\"\r\n"
-                        : "")
+                + "if errorlevel 1 (\r\n"
+                + "  echo HATA: Kopyalama basarisiz >> \""
+                +     GUNCELLEME_KLASORU.resolve("guncelle.log") + "\"\r\n"
+                + ") else (\r\n"
+                + "  echo Guncelleme basarili >> \""
+                +     GUNCELLEME_KLASORU.resolve("guncelle.log") + "\"\r\n"
+                + (launcher != null ? "  start \"\" \"" + launcher + "\"\r\n" : "")
+                + ")\r\n"
                 + "del \"" + yeniJarYolu + "\"\r\n"
                 + "del \"%~f0\"\r\n";
 
         Files.writeString(betik, bat, StandardCharsets.UTF_8);
+        guncellemeyiLogla("Betik yazıldı: " + betik);
 
-        // Betiği başlat (bağımsız process — JVM çıktıktan sonra devam eder)
-        new ProcessBuilder("cmd.exe", "/c", betik.toAbsolutePath().toString())
-                .start();
+        new ProcessBuilder("cmd.exe", "/c", betik.toAbsolutePath().toString()).start();
 
+        guncellemeyiLogla("Betik başlatıldı, çıkılıyor...");
         log.info("[GÜNCELLEME] Güncelleme betiği başlatıldı. Uygulama kapatılıyor...");
+    }
+
+    /** Güncelleme işlemlerini AppData/Local/MarketPOS/guncelleme/guncelleme.log'a yazar. */
+    public static void guncellemeyiLogla(String mesaj) {
+        try {
+            Path logDosyasi = GUNCELLEME_KLASORU.resolve("guncelleme.log");
+            Files.createDirectories(GUNCELLEME_KLASORU);
+            String satir = java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                    + " | " + mesaj + System.lineSeparator();
+            Files.writeString(logDosyasi, satir, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception ignored) {}
+        System.err.println("[GÜNCELLEME] " + mesaj);
     }
 
     // =========================================================
