@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.URI;
+import java.io.File;
 import java.net.URLDecoder;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
@@ -199,12 +200,12 @@ public class GuncellemeService {
      */
     public static void guncellemeUygula() throws Exception {
         Path yeniJar    = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
-        Path mevcutJar  = mevcutJarYoluBul();
+        File mevcutJar  = mevcutJarYoluBul();   // throws IOException if not found
         String launcher = launcherYoluBul();
         Path betik      = GUNCELLEME_KLASORU.resolve("guncelle.bat");
 
         guncellemeyiLogla("guncellemeUygula() çağrıldı");
-        guncellemeyiLogla("mevcutJar = " + mevcutJar);
+        guncellemeyiLogla("mevcutJar = " + mevcutJar.getAbsolutePath());
         guncellemeyiLogla("launcher  = " + launcher);
         guncellemeyiLogla("yeniJar   = " + yeniJar + " | exists=" + Files.exists(yeniJar));
 
@@ -212,17 +213,8 @@ public class GuncellemeService {
             throw new IOException("İndirilen JAR bulunamadı: " + yeniJar);
         }
 
-        if (mevcutJar == null) {
-            throw new IOException(
-                    "Mevcut JAR konumu belirlenemedi.\n" +
-                    "CodeSource: " + GuncellemeService.class
-                            .getProtectionDomain().getCodeSource().getLocation() + "\n" +
-                    "Bu hata geliştirme ortamında (IDE/mvn) normaldir.\n" +
-                    "Paketlenmiş kurulum dosyasında çalışmaz.");
-        }
-
         String yeniJarYolu = yeniJar.toAbsolutePath().toString();
-        String eskiJarYolu = mevcutJar.toAbsolutePath().toString();
+        String eskiJarYolu = mevcutJar.getAbsolutePath();
 
         String bat = "@echo off\r\n"
                 + "timeout /t 3 /nobreak >nul\r\n"
@@ -266,69 +258,30 @@ public class GuncellemeService {
     // =========================================================
 
     /**
-     * Çalışan JAR'ın tam dosya yolunu döndürür. IDE'den çalışıyorsa null.
-     *
-     * Spring Boot fat JAR'da getCodeSource().getLocation() şu formatta gelir:
-     *   jar:file:/C:/path/to/app.jar!/BOOT-INF/classes/
-     * Bunu parse ederek dış JAR yolunu döndürürüz.
+     * app-image formatında JAR her zaman şu konumda:
+     * [uygulama klasörü]/app/pos-0.0.1-SNAPSHOT.jar
      */
-    static Path mevcutJarYoluBul() {
-        // 1. Yöntem: CodeSource location — hem düz JAR hem Spring Boot fat JAR için
-        try {
-            var location = GuncellemeService.class
-                    .getProtectionDomain()
-                    .getCodeSource()
-                    .getLocation();
-            String urlStr = location.toString();
+    private static File mevcutJarYoluBul() throws IOException {
+        String exePath = ProcessHandle.current()
+                .info()
+                .command()
+                .orElse(null);
 
-            if (urlStr.startsWith("jar:nested:")) {
-                // Spring Boot 3.2+ app-image nested JAR:
-                // "jar:nested:/C:/path/app.jar!/BOOT-INF/classes/!"
-                String yol = urlStr.substring("jar:nested:".length());
-                int bang = yol.indexOf("!/");
-                if (bang > 0) yol = yol.substring(0, bang);
-                yol = URLDecoder.decode(yol, StandardCharsets.UTF_8);
-                if (yol.startsWith("/") && yol.length() > 2 && yol.charAt(2) == ':') {
-                    yol = yol.substring(1); // /C:/... → C:/...
-                }
-                Path p = Paths.get(yol);
-                guncellemeyiLogla("jar:nested parse → " + p + " | exists=" + Files.exists(p));
-                if (Files.exists(p)) return p;
+        guncellemeyiLogla("mevcutJarYoluBul — exePath: " + exePath);
 
-            } else if (urlStr.startsWith("jar:file:")) {
-                // Spring Boot fat JAR: "jar:file:/C:/path/app.jar!/BOOT-INF/classes/"
-                String yol = urlStr.substring("jar:file:".length());
-                int bang = yol.indexOf("!/");
-                if (bang > 0) yol = yol.substring(0, bang);
-                yol = URLDecoder.decode(yol, StandardCharsets.UTF_8);
-                if (yol.startsWith("/") && yol.length() > 2 && yol.charAt(2) == ':') {
-                    yol = yol.substring(1);
-                }
-                Path p = Paths.get(yol);
-                guncellemeyiLogla("jar:file parse → " + p + " | exists=" + Files.exists(p));
-                if (Files.exists(p)) return p;
-
-            } else if (urlStr.startsWith("file:")) {
-                // Düz JAR: "file:/C:/path/app.jar"
-                Path p = Paths.get(location.toURI());
-                if (p.toString().toLowerCase().endsWith(".jar") && Files.exists(p)) return p;
+        if (exePath != null) {
+            File exeFile = new File(exePath);
+            // exe'nin bulunduğu klasör = uygulama kök klasörü
+            // app/pos-0.0.1-SNAPSHOT.jar oradan
+            File jarFile = new File(exeFile.getParentFile(),
+                    "app/pos-0.0.1-SNAPSHOT.jar");
+            guncellemeyiLogla("jarFile aranıyor: " + jarFile.getAbsolutePath()
+                    + " | exists=" + jarFile.exists());
+            if (jarFile.exists()) {
+                return jarFile;
             }
-        } catch (Exception ignored) {}
-
-        // 2. Yöntem: ProcessHandle — process argümanlarında .jar ara
-        try {
-            var args = ProcessHandle.current().info().arguments();
-            if (args.isPresent()) {
-                for (String arg : args.get()) {
-                    if (arg.toLowerCase().endsWith(".jar")) {
-                        Path p = Paths.get(arg);
-                        if (Files.exists(p)) return p;
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-
-        return null; // IDE'den çalışıyor
+        }
+        throw new IOException("JAR bulunamadı. EXE yolu: " + exePath);
     }
 
     /**
@@ -340,12 +293,6 @@ public class GuncellemeService {
             String komut = ProcessHandle.current().info().command().orElse("");
             if (!komut.toLowerCase().contains("java")) {
                 return komut; // MarketPOS.exe
-            }
-            // JAR'ın yanındaki .exe'yi ara
-            Path jarYolu = mevcutJarYoluBul();
-            if (jarYolu != null) {
-                Path exeAday = jarYolu.getParent().resolve("MarketPOS.exe");
-                if (Files.exists(exeAday)) return exeAday.toString();
             }
         } catch (Exception ignored) {}
         return null;
