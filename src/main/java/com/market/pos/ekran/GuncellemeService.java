@@ -281,17 +281,31 @@ public class GuncellemeService {
                     .getLocation();
             String urlStr = location.toString();
 
-            if (urlStr.startsWith("jar:file:")) {
+            if (urlStr.startsWith("jar:nested:")) {
+                // Spring Boot 3.2+ app-image nested JAR:
+                // "jar:nested:/C:/path/app.jar!/BOOT-INF/classes/!"
+                String yol = urlStr.substring("jar:nested:".length());
+                int bang = yol.indexOf("!/");
+                if (bang > 0) yol = yol.substring(0, bang);
+                yol = URLDecoder.decode(yol, StandardCharsets.UTF_8);
+                if (yol.startsWith("/") && yol.length() > 2 && yol.charAt(2) == ':') {
+                    yol = yol.substring(1); // /C:/... → C:/...
+                }
+                Path p = Paths.get(yol);
+                guncellemeyiLogla("jar:nested parse → " + p + " | exists=" + Files.exists(p));
+                if (Files.exists(p)) return p;
+
+            } else if (urlStr.startsWith("jar:file:")) {
                 // Spring Boot fat JAR: "jar:file:/C:/path/app.jar!/BOOT-INF/classes/"
                 String yol = urlStr.substring("jar:file:".length());
                 int bang = yol.indexOf("!/");
                 if (bang > 0) yol = yol.substring(0, bang);
                 yol = URLDecoder.decode(yol, StandardCharsets.UTF_8);
-                // Windows'ta başındaki / kaldır: /C:/Users → C:/Users
                 if (yol.startsWith("/") && yol.length() > 2 && yol.charAt(2) == ':') {
                     yol = yol.substring(1);
                 }
                 Path p = Paths.get(yol);
+                guncellemeyiLogla("jar:file parse → " + p + " | exists=" + Files.exists(p));
                 if (Files.exists(p)) return p;
 
             } else if (urlStr.startsWith("file:")) {
