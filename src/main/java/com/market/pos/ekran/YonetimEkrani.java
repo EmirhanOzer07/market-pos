@@ -984,11 +984,10 @@ public class YonetimEkrani {
                             "/api/kullanicilar/sifre-degistir",
                             Map.of("eskiSifre", eski, "yeniSifre", yeni));
                     Platform.runLater(() -> {
-                        String mesaj = yanit.getOrDefault("mesaj", "").toString();
-                        if (mesaj.contains("Başarılı")) {
-                            bildir("✓ Şifreniz başarıyla değiştirildi.", "#27ae60");
+                        if (yanit.containsKey("hata")) {
+                            bildir("❌ " + yanit.get("hata"), "#e74c3c");
                         } else {
-                            bildir("❌ " + mesaj, "#e74c3c");
+                            bildir("✓ Şifreniz başarıyla değiştirildi.", "#27ae60");
                         }
                     });
                 } catch (Exception ex) {
