@@ -135,22 +135,26 @@ public class YedekController {
             throw new IllegalArgumentException("Dosya adı belirtilmedi!");
         }
 
-        // CWE-22: Path traversal koruması
-        if (dosyaAdi.contains("/") || dosyaAdi.contains("\\")
-                || dosyaAdi.contains("..") || dosyaAdi.contains(":")) {
-            throw new IllegalArgumentException("Geçersiz dosya adı!");
-        }
+        // CWE-22: Path traversal koruması — normalize + startsWith ile güvenli kontrol
         if (!dosyaAdi.endsWith(".zip")) {
             throw new IllegalArgumentException("Geçersiz dosya formatı!");
         }
 
-        // Dosyayı bul
+        // Dosyayı bul — sadece izin verilen klasörler içinde arama yap
         File dosya = null;
-        File gunlukAdayi = new File(GUNLUK_DIR, dosyaAdi);
-        File islemAdayi  = new File(ISLEM_DIR,  dosyaAdi);
+        java.nio.file.Path gunlukBase = java.nio.file.Paths.get(GUNLUK_DIR).toAbsolutePath().normalize();
+        java.nio.file.Path islemBase  = java.nio.file.Paths.get(ISLEM_DIR).toAbsolutePath().normalize();
 
-        if (gunlukAdayi.exists() && gunlukAdayi.isFile()) dosya = gunlukAdayi;
-        else if (islemAdayi.exists() && islemAdayi.isFile()) dosya = islemAdayi;
+        java.nio.file.Path gunlukAdayi = gunlukBase.resolve(dosyaAdi).normalize();
+        java.nio.file.Path islemAdayi  = islemBase.resolve(dosyaAdi).normalize();
+
+        // Resolved path hâlâ izin verilen klasör içinde mi?
+        if (!gunlukAdayi.startsWith(gunlukBase) && !islemAdayi.startsWith(islemBase)) {
+            throw new IllegalArgumentException("Geçersiz dosya adı!");
+        }
+
+        if (gunlukAdayi.startsWith(gunlukBase) && gunlukAdayi.toFile().isFile()) dosya = gunlukAdayi.toFile();
+        else if (islemAdayi.startsWith(islemBase) && islemAdayi.toFile().isFile()) dosya = islemAdayi.toFile();
 
         if (dosya == null) {
             throw new IllegalArgumentException("Yedek dosyası bulunamadı: " + dosyaAdi);

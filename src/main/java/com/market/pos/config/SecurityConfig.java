@@ -32,7 +32,12 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/superadmin/**").permitAll()
+                        // SuperAdmin: ek kontrol controller içinde de var (yerelErisimMi)
+                        .requestMatchers("/api/superadmin/**").access((authentication, context) -> {
+                            String ip = context.getRequest().getRemoteAddr();
+                            boolean yerel = "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip);
+                            return new org.springframework.security.authorization.AuthorizationDecision(yerel);
+                        })
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
@@ -44,7 +49,8 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsKonfigurasyonu() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:8080"));
+        String port = System.getProperty("server.port", "8080");
+        config.setAllowedOrigins(List.of("http://localhost:" + port));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);

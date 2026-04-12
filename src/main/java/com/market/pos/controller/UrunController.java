@@ -169,6 +169,14 @@ public class UrunController {
                         hatalar.add("Satır " + satirNo + ": Barkod veya isim alanı boş");
                         continue;
                     }
+                    if (barkod.length() > 100) {
+                        hatalar.add("Satır " + satirNo + ": Barkod çok uzun (max 100 karakter)");
+                        continue;
+                    }
+                    if (isim.length() > 255) {
+                        hatalar.add("Satır " + satirNo + ": Ürün adı çok uzun (max 255 karakter)");
+                        continue;
+                    }
 
                     BigDecimal fiyat;
                     try {

@@ -2,6 +2,7 @@ package com.market.pos.ekran;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -59,9 +60,12 @@ public class ApiClient {
                 HttpResponse.BodyHandlers.ofString());
 
         String body = response.body();
-        // 404 veya boş body → ürün bulunamadı, null döndür (exception değil)
+        // 404 veya boş body → bulunamadı, null döndür (exception değil)
         if (response.statusCode() == 404 || body == null || body.isBlank() || "null".equals(body)) {
             return null;
+        }
+        if (response.statusCode() >= 500) {
+            throw new IOException("Sunucu hatası: HTTP " + response.statusCode());
         }
         return mapper.readValue(body, Map.class);
     }
@@ -78,6 +82,10 @@ public class ApiClient {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString());
 
+        int status = response.statusCode();
+        if (status >= 500) {
+            throw new IOException("Sunucu hatası: HTTP " + status);
+        }
         return mapper.readValue(response.body(), java.util.List.class);
     }
 

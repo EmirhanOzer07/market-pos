@@ -137,6 +137,10 @@ public class SatisController {
         try {
             java.time.LocalDate basLd = java.time.LocalDate.parse(baslangic);
             java.time.LocalDate bitLd = java.time.LocalDate.parse(bitis);
+
+            if (basLd.isAfter(bitLd)) {
+                throw new IllegalArgumentException("Başlangıç tarihi bitiş tarihinden sonra olamaz!");
+            }
             java.util.Date bas = java.util.Date.from(
                     basLd.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
             java.util.Date bit = java.util.Date.from(
