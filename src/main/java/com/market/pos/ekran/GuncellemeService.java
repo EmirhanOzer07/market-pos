@@ -7,38 +7,32 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.URI;
-import java.io.File;
-import java.net.URLDecoder;
 import java.net.http.*;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.function.LongConsumer;
 
 /**
  * Otomatik güncelleme servisi.
  *
- * Akış:
- *   1. GitHub Releases API → en son sürüm kontrolü
- *   2. Yeni sürüm varsa → JAR'ı indir (ilerlemeli)
- *   3. Güncelleme betiği (guncelle.bat) oluştur
- *   4. Betiği başlat → uygulamadan çık → betik JAR'ı değiştirir → uygulamayı yeniden başlatır
- *
- * KURULUM GEREKSİNİMLERİ:
- *   - GITHUB_OWNER ve GITHUB_REPO sabitlerini kendi değerlerinizle değiştirin
- *   - Her release'de JAR dosyasını asset olarak yükleyin (adı .jar ile bitmeli)
- *   - MEVCUT_SURUM'u her yeni release öncesi artırın (örn. "1.0.0" → "1.1.0")
+ * Döngü önleme mekanizması:
+ *   - Bat başarılı kopyalamadan sonra .installed_version dosyasına yeni sürümü yazar
+ *   - Sonraki açılışta kod bu dosyayı okur → GitHub sürümü ile karşılaştırır
+ *   - Böylece GitHub JAR'ındaki MEVCUT_SURUM sabitinden bağımsız çalışır
  */
 public class GuncellemeService {
 
     private static final Logger log = LoggerFactory.getLogger(GuncellemeService.class);
 
-    // ✏️ BUNLARI DEĞİŞTİR — GitHub kullanıcı adı ve repo adı
     private static final String GITHUB_OWNER = "EmirhanOzer07";
     private static final String GITHUB_REPO  = "market-pos";
 
-    // ✏️ Her yeni sürümde bu sabiti artır, sonra GitHub'a push et
-    public static final String MEVCUT_SURUM = "1.1.0";
+    // ✏️ Her yeni release öncesi artır
+    public static final String MEVCUT_SURUM = "1.4.0";
 
     private static final String GITHUB_API_URL =
             "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/releases/latest";
@@ -46,18 +40,44 @@ public class GuncellemeService {
     private static final Path GUNCELLEME_KLASORU = Paths.get(
             System.getProperty("user.home"), "AppData", "Local", "MarketPOS", "guncelleme");
 
+    // Tek log dosyası — hem Java hem bat buraya yazar
+    private static final Path LOG_DOSYASI = GUNCELLEME_KLASORU.resolve("guncelleme.log");
+
+    // Kurulu sürümü saklar — döngü önleme için
+    private static final Path KURULU_SURUM_DOSYASI = Paths.get(
+            System.getProperty("user.home"), "AppData", "Local", "MarketPOS", ".installed_version");
+
     public record GuncellemeBilgisi(String yeniSurum, String indirmeUrl, String surumNotu) {}
+
+    // =========================================================
+    // Kurulu sürüm yönetimi
+    // =========================================================
+
+    /**
+     * Gerçek kurulu sürümü döndürür.
+     * Önce .installed_version dosyasına bakar (bat tarafından yazılır),
+     * yoksa MEVCUT_SURUM sabitini kullanır.
+     */
+    public static String mevcutSurumOku() {
+        try {
+            if (Files.exists(KURULU_SURUM_DOSYASI)) {
+                String surum = Files.readString(KURULU_SURUM_DOSYASI, StandardCharsets.UTF_8).trim();
+                if (!surum.isBlank()) {
+                    return surum;
+                }
+            }
+        } catch (Exception ignored) {}
+        return MEVCUT_SURUM;
+    }
 
     // =========================================================
     // 1. ADIM: GitHub'dan yeni sürüm var mı?
     // =========================================================
 
-    /**
-     * GitHub Releases API'yi kontrol eder.
-     * @return GuncellemeBilgisi yeni sürüm varsa, null yoksa veya hata olursa.
-     */
     public static GuncellemeBilgisi guncellemeVarMi() {
         try {
+            String kurulu = mevcutSurumOku();
+
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(6))
                     .build();
@@ -65,28 +85,25 @@ public class GuncellemeService {
             HttpRequest istek = HttpRequest.newBuilder()
                     .uri(URI.create(GITHUB_API_URL))
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "MarketPOS/" + MEVCUT_SURUM)
+                    .header("User-Agent", "MarketPOS/" + kurulu)
                     .timeout(Duration.ofSeconds(10))
                     .GET()
                     .build();
 
-            HttpResponse<String> yanit = client.send(istek,
-                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> yanit = client.send(istek, HttpResponse.BodyHandlers.ofString());
 
-            guncellemeyiLogla("GitHub API HTTP " + yanit.statusCode()
-                    + " — URL: " + GITHUB_API_URL);
-            guncellemeyiLogla("GitHub API Response:\n" + yanit.body());
-
+            guncellemeyiLogla("GitHub API HTTP " + yanit.statusCode());
             if (yanit.statusCode() != 200) return null;
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode kok = mapper.readTree(yanit.body());
 
             String yeniSurum = kok.get("tag_name").asText("").replaceFirst("^v", "");
-            guncellemeyiLogla("Mevcut sürüm: " + MEVCUT_SURUM + " | GitHub sürümü: " + yeniSurum);
-            if (yeniSurum.isBlank() || !surumDahaYeni(yeniSurum, MEVCUT_SURUM)) return null;
+            guncellemeyiLogla("Kurulu sürüm: " + kurulu + " | GitHub sürümü: " + yeniSurum);
 
-            // Assets içinden .jar dosyasını bul
+            if (yeniSurum.isBlank() || !surumDahaYeni(yeniSurum, kurulu)) return null;
+
+            // Assets içinden .jar bul
             String indirmeUrl = null;
             JsonNode assets = kok.get("assets");
             if (assets != null) {
@@ -97,57 +114,52 @@ public class GuncellemeService {
                     }
                 }
             }
-            if (indirmeUrl == null) return null;
+            if (indirmeUrl == null) {
+                guncellemeyiLogla("HATA: Release'de .jar asset bulunamadı!");
+                return null;
+            }
 
             String surumNotu = kok.has("body") ? kok.get("body").asText("") : "";
             return new GuncellemeBilgisi(yeniSurum, indirmeUrl, surumNotu);
 
         } catch (Exception e) {
-            // İnternet yok veya API erişilemiyor → sessizce geç
             log.debug("[GÜNCELLEME] Kontrol edilemedi: {}", e.getMessage());
             return null;
         }
     }
 
     // =========================================================
-    // 2. ADIM: İndir + Uygula
+    // 2. ADIM: İndir
     // =========================================================
 
-    /**
-     * Yeni JAR'ı indirir ve güncelleme betiğini çalıştırarak uygulamayı yeniden başlatır.
-     *
-     * @param indirmeUrl  GitHub asset download URL
-     * @param ilerlemeCB  0.0–1.0 arası indirme ilerlemesi (UI progress bar için)
-     */
     public static void indir(String indirmeUrl, LongConsumer ilerlemeCB) throws Exception {
         Files.createDirectories(GUNCELLEME_KLASORU);
         Path yeniJar = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
 
-        // HttpClient: redirect'leri otomatik takip eder (GitHub → CDN arası yönlendirme)
+        guncellemeyiLogla("İndirme başlıyor: " + indirmeUrl);
+
         HttpClient client = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.ALWAYS)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
 
-        // Önce HEAD ile dosya boyutunu al (progress bar için)
+        // HEAD ile boyut al
         long toplamBoyut = -1;
         try {
             HttpRequest headIstek = HttpRequest.newBuilder()
                     .uri(URI.create(indirmeUrl))
                     .method("HEAD", HttpRequest.BodyPublishers.noBody())
-                    .header("User-Agent", "MarketPOS/" + MEVCUT_SURUM)
+                    .header("User-Agent", "MarketPOS/" + mevcutSurumOku())
                     .timeout(Duration.ofSeconds(10))
                     .build();
-            HttpResponse<Void> headYanit = client.send(headIstek,
-                    HttpResponse.BodyHandlers.discarding());
-            toplamBoyut = headYanit.headers()
-                    .firstValueAsLong("content-length").orElse(-1);
+            toplamBoyut = client.send(headIstek, HttpResponse.BodyHandlers.discarding())
+                    .headers().firstValueAsLong("content-length").orElse(-1);
         } catch (Exception ignored) {}
 
-        // Gerçek indirme — InputStream olarak al, elle oku (progress takibi)
+        // Gerçek indirme
         HttpRequest getIstek = HttpRequest.newBuilder()
                 .uri(URI.create(indirmeUrl))
-                .header("User-Agent", "MarketPOS/" + MEVCUT_SURUM)
+                .header("User-Agent", "MarketPOS/" + mevcutSurumOku())
                 .header("Accept", "application/octet-stream")
                 .timeout(Duration.ofSeconds(300))
                 .build();
@@ -155,23 +167,17 @@ public class GuncellemeService {
         HttpResponse<InputStream> yanit = client.send(getIstek,
                 HttpResponse.BodyHandlers.ofInputStream());
 
-        int httpKod = yanit.statusCode();
-        if (httpKod != 200) {
-            throw new IOException("GitHub indirme hatası: HTTP " + httpKod
-                    + " — URL: " + indirmeUrl);
+        if (yanit.statusCode() != 200) {
+            throw new IOException("İndirme hatası: HTTP " + yanit.statusCode());
         }
-
-        // Content-Length HEAD'den gelemediyse GET response header'ından dene
         if (toplamBoyut <= 0) {
-            toplamBoyut = yanit.headers()
-                    .firstValueAsLong("content-length").orElse(-1);
+            toplamBoyut = yanit.headers().firstValueAsLong("content-length").orElse(-1);
         }
 
         long indirildi = 0;
         try (InputStream is  = new BufferedInputStream(yanit.body());
              OutputStream os = Files.newOutputStream(yeniJar,
                      StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-
             byte[] buffer = new byte[16_384];
             int okunan;
             final long toplamFinal = toplamBoyut;
@@ -179,99 +185,124 @@ public class GuncellemeService {
                 os.write(buffer, 0, okunan);
                 indirildi += okunan;
                 if (toplamFinal > 0 && ilerlemeCB != null) {
-                    ilerlemeCB.accept(indirildi * 100 / toplamFinal); // 0–100
+                    ilerlemeCB.accept(indirildi * 100 / toplamFinal);
                 }
             }
         }
 
-        guncellemeyiLogla("İndirme URL: " + indirmeUrl);
-        guncellemeyiLogla("İndirilen boyut: " + indirildi + " byte | Beklenen: " + toplamBoyut);
-
         if (indirildi == 0) {
-            throw new IOException("İndirilen dosya boş (0 byte)! URL: " + indirmeUrl);
+            throw new IOException("İndirilen dosya boş (0 byte)!");
         }
 
-        log.info("[GÜNCELLEME] İndirme tamamlandı: {} byte", indirildi);
+        guncellemeyiLogla("İndirme tamamlandı: " + indirildi + " / " + toplamBoyut + " byte");
     }
 
-    /**
-     * Güncelleme betiğini oluşturur ve çalıştırır.
-     * Betik: uygulamadan çıkıldıktan 3 saniye sonra JAR'ı değiştirir ve yeniden başlatır.
-     */
-    public static void guncellemeUygula() throws Exception {
-        Path yeniJar    = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
-        File mevcutJar  = mevcutJarYoluBul();   // throws IOException if not found
-        String launcher = launcherYoluBul();
-        Path betik      = GUNCELLEME_KLASORU.resolve("guncelle.bat");
+    // =========================================================
+    // 3. ADIM: Uygula — bat yaz, başlat, çık
+    // =========================================================
 
-        guncellemeyiLogla("guncellemeUygula() çağrıldı");
-        guncellemeyiLogla("mevcutJar = " + mevcutJar.getAbsolutePath());
-        guncellemeyiLogla("launcher  = " + launcher);
-        guncellemeyiLogla("yeniJar   = " + yeniJar + " | exists=" + Files.exists(yeniJar));
+    /**
+     * @param yeniSurum  Yeni sürüm numarası (bat tarafından .installed_version'a yazılacak)
+     */
+    public static void guncellemeUygula(String yeniSurum) throws Exception {
+        Path yeniJar = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
+        Path betik   = GUNCELLEME_KLASORU.resolve("guncelle.bat");
 
         if (!Files.exists(yeniJar)) {
             throw new IOException("İndirilen JAR bulunamadı: " + yeniJar);
         }
 
-        String yeniJarYolu = yeniJar.toAbsolutePath().toString();
-        String eskiJarYolu = mevcutJar.getAbsolutePath();
-        String logYolu     = GUNCELLEME_KLASORU.resolve("guncelle.log").toString();
-
-        // Yeniden başlatma için exe yolunu al
+        // EXE yolu — hem launcher hem JAR konumu için kullanılır
         String exeYolu = ProcessHandle.current().info().command().orElse(null);
-        guncellemeyiLogla("Restart exe yolu: " + exeYolu);
+        guncellemeyiLogla("EXE yolu: " + exeYolu);
 
         if (exeYolu == null || exeYolu.toLowerCase().contains("java")) {
             throw new IOException(
-                    "Yeniden başlatma için exe yolu belirlenemedi: " + exeYolu
-                    + "\nBu hata geliştirme ortamında normaldir.");
+                    "Paketlenmiş uygulama dışında güncelleme yapılamaz.\n"
+                    + "EXE yolu: " + exeYolu + "\n"
+                    + "(Geliştirme ortamında bu hata normaldir.)");
         }
 
-        // Bat: kopyala → portu temizle → yeni örneği başlat
-        // Java sadece System.exit(0) yapacak — bat her şeyi halleder
+        File exeDosya  = new File(exeYolu);
+        File jarDosya  = new File(exeDosya.getParentFile(), "app/pos-0.0.1-SNAPSHOT.jar");
+
+        guncellemeyiLogla("Hedef JAR: " + jarDosya.getAbsolutePath() + " | exists=" + jarDosya.exists());
+
+        if (!jarDosya.exists()) {
+            throw new IOException("Hedef JAR bulunamadı: " + jarDosya.getAbsolutePath());
+        }
+
+        String yeniJarYolu = yeniJar.toAbsolutePath().toString();
+        String eskiJarYolu = jarDosya.getAbsolutePath();
+        String logYolu     = LOG_DOSYASI.toAbsolutePath().toString();
+        String versiyonYolu = KURULU_SURUM_DOSYASI.toAbsolutePath().toString();
+
+        // ─────────────────────────────────────────────────────
+        // Bat içeriği
+        // chcp 65001: Türkçe karakter içeren path'lerin doğru çalışması için zorunlu
+        // Tüm log çıktısı guncelleme.log'a → tek log dosyası
+        // ─────────────────────────────────────────────────────
+        // Bat dosyası Windows-1254 (Türkçe Windows varsayılan kod sayfası) ile yazılır.
+        // cmd.exe bat dosyalarını varsayılan sistem kod sayfasında okur.
+        // UTF-8 yazılırsa İ/Ö gibi Türkçe karakterler bozulur → path bulunamaz.
+        // CP1254 ile yazınca cmd.exe doğru okur, Türkçe path'ler çalışır.
+        Charset batKodSayfasi = Charset.forName("windows-1254");
+
+        String ts = timestamp();
         String bat = "@echo off\r\n"
-                // 1. Eski JVM'in kapanmasını bekle (port + JAR kilidi bırakılsın)
-                + "timeout /t 5 /nobreak >nul\r\n"
-                // 2. Yeni JAR'ı kopyala
+                + "chcp 1254 >nul\r\n"
+
+                // 1. Eski JVM kapansın, port ve JAR kilidi bırakılsın
+                + "echo " + ts + " BAT: Bekleniyor (JVM kapansin)... >> \"" + logYolu + "\"\r\n"
+                + "timeout /t 8 /nobreak >nul\r\n"
+
+                // 2. Kopyala
                 + "copy /y \"" + yeniJarYolu + "\" \"" + eskiJarYolu + "\"\r\n"
                 + "if errorlevel 1 (\r\n"
-                + "  echo " + timestamp() + " HATA: Kopyalama basarisiz >> \"" + logYolu + "\"\r\n"
+                + "  echo " + ts + " BAT HATA: JAR kopyalanamadi >> \"" + logYolu + "\"\r\n"
                 + "  goto cleanup\r\n"
                 + ") else (\r\n"
-                + "  echo " + timestamp() + " Kopyalama basarili >> \"" + logYolu + "\"\r\n"
+                + "  echo " + ts + " BAT: JAR kopyalandi >> \"" + logYolu + "\"\r\n"
                 + ")\r\n"
-                // 3. Kalan MarketPOS prosesini temizle
-                + "taskkill /F /IM MarketPOS.exe /T 2>nul\r\n"
-                + "timeout /t 3 /nobreak >nul\r\n"
-                // 4. Port 8080'i dinleyen prosesi bul ve öldür
+
+                // 3. Kurulu sürüm dosyasını güncelle — döngü önleme
+                + "echo " + yeniSurum + " > \"" + versiyonYolu + "\"\r\n"
+                + "echo " + ts + " BAT: .installed_version yazildi: " + yeniSurum
+                            + " >> \"" + logYolu + "\"\r\n"
+
+                // 4. Port 8080'i zorla boşalt (taskkill /F /IM MarketPOS.exe KULLANILMAZ
+                //    — cmd.exe MarketPOS.exe'nin child process'i olduğundan kendini öldürür)
                 + "for /f \"tokens=5\" %%a in ('netstat -ano ^| findstr :8080') do (\r\n"
                 + "  taskkill /F /PID %%a 2>nul\r\n"
                 + ")\r\n"
                 + "timeout /t 2 /nobreak >nul\r\n"
+
                 // 5. Yeni örneği başlat
-                + "start \"\" \"" + exeYolu + "\"\r\n"
-                + "echo " + timestamp() + " Uygulama baslatildi >> \"" + logYolu + "\"\r\n"
+                + "start \"MarketPOS\" \"" + exeYolu + "\"\r\n"
+                + "echo " + ts + " BAT: Uygulama baslatildi >> \"" + logYolu + "\"\r\n"
+
                 + ":cleanup\r\n"
                 + "del \"" + yeniJarYolu + "\" 2>nul\r\n"
                 + "del \"%~f0\"\r\n";
 
-        Files.writeString(betik, bat, StandardCharsets.UTF_8);
-        guncellemeyiLogla("Betik yazıldı:\n" + bat);
+        Files.writeString(betik, bat, batKodSayfasi);
+        guncellemeyiLogla("Betik yazıldı — yeniSurum=" + yeniSurum);
 
         new ProcessBuilder("cmd.exe", "/c", betik.toAbsolutePath().toString()).start();
-        guncellemeyiLogla("Betik başlatıldı — Java şimdi kapanıyor...");
-        log.info("[GÜNCELLEME] Güncelleme betiği başlatıldı. Uygulama kapanıyor...");
+        guncellemeyiLogla("Betik başlatıldı — Java kapanıyor...");
     }
 
-    /** Güncelleme işlemlerini AppData/Local/MarketPOS/guncelleme/guncelleme.log'a yazar. */
+    // =========================================================
+    // Loglama
+    // =========================================================
+
     public static void guncellemeyiLogla(String mesaj) {
         try {
-            Path logDosyasi = GUNCELLEME_KLASORU.resolve("guncelleme.log");
             Files.createDirectories(GUNCELLEME_KLASORU);
-            String satir = java.time.LocalDateTime.now()
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+            String satir = LocalDateTime.now()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                     + " | " + mesaj + System.lineSeparator();
-            Files.writeString(logDosyasi, satir, StandardCharsets.UTF_8,
+            Files.writeString(LOG_DOSYASI, satir, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception ignored) {}
         System.err.println("[GÜNCELLEME] " + mesaj);
@@ -281,53 +312,11 @@ public class GuncellemeService {
     // Yardımcı metodlar
     // =========================================================
 
-    /**
-     * app-image formatında JAR her zaman şu konumda:
-     * [uygulama klasörü]/app/pos-0.0.1-SNAPSHOT.jar
-     */
-    private static File mevcutJarYoluBul() throws IOException {
-        String exePath = ProcessHandle.current()
-                .info()
-                .command()
-                .orElse(null);
-
-        guncellemeyiLogla("mevcutJarYoluBul — exePath: " + exePath);
-
-        if (exePath != null) {
-            File exeFile = new File(exePath);
-            // exe'nin bulunduğu klasör = uygulama kök klasörü
-            // app/pos-0.0.1-SNAPSHOT.jar oradan
-            File jarFile = new File(exeFile.getParentFile(),
-                    "app/pos-0.0.1-SNAPSHOT.jar");
-            guncellemeyiLogla("jarFile aranıyor: " + jarFile.getAbsolutePath()
-                    + " | exists=" + jarFile.exists());
-            if (jarFile.exists()) {
-                return jarFile;
-            }
-        }
-        throw new IOException("JAR bulunamadı. EXE yolu: " + exePath);
-    }
-
-    /**
-     * Uygulamayı başlatan launcher exe'yi döndürür.
-     * jpackage ile paketlendiyse MarketPOS.exe, aksi hâlde null.
-     */
-    private static String launcherYoluBul() {
-        try {
-            String komut = ProcessHandle.current().info().command().orElse("");
-            if (!komut.toLowerCase().contains("java")) {
-                return komut; // MarketPOS.exe
-            }
-        } catch (Exception ignored) {}
-        return null;
-    }
-
     private static String timestamp() {
-        return java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+        return LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
     }
 
-    /** "1.1.0" > "1.0.5" → true gibi semantik sürüm karşılaştırması. */
     static boolean surumDahaYeni(String yeni, String mevcut) {
         try {
             String[] y = yeni.trim().split("\\.");

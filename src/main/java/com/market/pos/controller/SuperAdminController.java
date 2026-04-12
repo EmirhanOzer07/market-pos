@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import com.market.pos.security.AuditLogger;
 
@@ -26,13 +27,9 @@ import java.util.*;
  * %APPDATA%\Local\MarketPOS\patron.hash dosyasında saklanır.
  *
  * Bu dosya git'e girmez → CWE-798 (hard-coded credentials) riski yok.
- * Şifre değiştirmek için: patron.hash içindeki satırı yeni SHA-256 hash ile değiştir.
+ * Yeni kurulumlar BCrypt kullanır. Eski SHA-256 hash'ler ilk başarılı girişte otomatik migrate edilir.
  *
- * Hash üretmek için PowerShell:
- *   ([System.BitConverter]::ToString(
- *     [System.Security.Cryptography.SHA256]::Create()
- *     .ComputeHash([System.Text.Encoding]::UTF8.GetBytes("YeniSifre"))
- *   ) -replace "-").ToLower()
+ * Şifre sıfırlamak için patron.hash dosyasını silin — uygulama varsayılan şifreyle yeniden oluşturur.
  */
 @RestController
 @RequestMapping("/api/superadmin")
@@ -45,19 +42,17 @@ public class SuperAdminController {
             System.getProperty("user.home"),
             "AppData", "Local", "MarketPOS", "patron.hash");
 
-    // Varsayılan şifre "patron123" — sadece patron.hash yoksa kullanılır
-    private static final String VARSAYILAN_HASH =
-            "080f732e09f4a6b86878423a60561e87e814571f7069399cb3614578ef151560";
-
     @Autowired private AuditLogger auditLogger;
     @Autowired private DavetiyeKoduRepository davetiyeRepo;
     @Autowired private MarketRepository marketRepository;
+    @Autowired private BCryptPasswordEncoder passwordEncoder;
 
     private String patronSifresiHash;
 
     /**
      * Uygulama başlarken hash'i AppData'dan yükle.
-     * Dosya yoksa oluştur ve varsayılan hash'i yaz.
+     * - Dosya yoksa BCrypt("patron123") ile oluştur (yeni kurulum).
+     * - Eski SHA-256 format (64 hex) geçerli — ilk başarılı girişte otomatik BCrypt'e migrate edilir.
      */
     @PostConstruct
     private void hashYukle() {
@@ -65,31 +60,63 @@ public class SuperAdminController {
             Files.createDirectories(HASH_DOSYASI.getParent());
 
             if (!Files.exists(HASH_DOSYASI)) {
-                // İlk çalıştırma: varsayılan hash ile dosya oluştur
-                Files.writeString(HASH_DOSYASI, VARSAYILAN_HASH, StandardCharsets.UTF_8);
-                log.warn("Patron hash dosyası oluşturuldu: {} | Varsayılan şifre: patron123 | " +
-                         "Güvenlik için değiştirin!", HASH_DOSYASI);
+                // Yeni kurulum: direkt BCrypt ile oluştur
+                String bcryptDefault = passwordEncoder.encode("patron123");
+                Files.writeString(HASH_DOSYASI, bcryptDefault, StandardCharsets.UTF_8);
+                patronSifresiHash = bcryptDefault;
+                log.warn("Patron hash dosyası oluşturuldu (BCrypt): {} | " +
+                         "Varsayılan şifre: patron123 | Güvenlik için değiştirin!", HASH_DOSYASI);
+                return;
             }
 
             String okunan = Files.readString(HASH_DOSYASI, StandardCharsets.UTF_8).trim();
             // PowerShell UTF-8 BOM'unu temizle (\uFEFF)
             if (okunan.startsWith("\uFEFF")) okunan = okunan.substring(1);
 
-            // Basit format doğrulaması — 64 hex karakter olmalı
-            if (!okunan.matches("[0-9a-f]{64}")) {
-                log.error("patron.hash geçersiz format — varsayılan kullanılıyor. " +
-                          "Dosya 64 karakterlik küçük harf hex içermeli.");
-                patronSifresiHash = VARSAYILAN_HASH;
-            } else {
+            // BCrypt format: $2a$, $2b$, $2y$ ile başlar
+            if (okunan.startsWith("$2")) {
                 patronSifresiHash = okunan;
-                log.info("Patron hash yüklendi: {}  ({}...)",
-                        HASH_DOSYASI, okunan.substring(0, 8));
+                log.info("Patron BCrypt hash yüklendi: {}", HASH_DOSYASI);
+            } else if (okunan.matches("[0-9a-f]{64}")) {
+                // Eski SHA-256 format — geçerli, ilk başarılı girişte migrate edilecek
+                patronSifresiHash = okunan;
+                log.info("Patron SHA-256 hash yüklendi (ilk başarılı girişte BCrypt'e migrate edilecek): {}",
+                        HASH_DOSYASI);
+            } else {
+                log.error("patron.hash geçersiz format — varsayılan BCrypt kullanılıyor. " +
+                          "Dosyayı silerek uygulamayı yeniden başlatın.");
+                patronSifresiHash = passwordEncoder.encode("patron123");
             }
 
         } catch (IOException e) {
-            log.error("patron.hash okunamadı, varsayılan kullanılıyor: {}", e.getMessage());
-            patronSifresiHash = VARSAYILAN_HASH;
+            log.error("patron.hash okunamadı, varsayılan BCrypt kullanılıyor: {}", e.getMessage());
+            patronSifresiHash = passwordEncoder.encode("patron123");
         }
+    }
+
+    /**
+     * Şifre doğrulama — BCrypt ve eski SHA-256 formatlarını destekler.
+     * SHA-256 eşleşmesi durumunda dosya BCrypt'e otomatik migrate edilir.
+     */
+    private boolean sifreDogrula(String giris) {
+        if (patronSifresiHash.startsWith("$2")) {
+            // BCrypt format
+            return passwordEncoder.matches(giris, patronSifresiHash);
+        }
+        // Eski SHA-256 format
+        boolean eslesme = patronSifresiHash.equals(sha256Hashle(giris));
+        if (eslesme) {
+            // Başarılı — BCrypt'e migrate et
+            try {
+                String yeniHash = passwordEncoder.encode(giris);
+                Files.writeString(HASH_DOSYASI, yeniHash, StandardCharsets.UTF_8);
+                patronSifresiHash = yeniHash;
+                log.info("patron.hash SHA-256'dan BCrypt'e otomatik migrate edildi.");
+            } catch (Exception e) {
+                log.warn("patron.hash BCrypt migrate edilemedi: {}", e.getMessage());
+            }
+        }
+        return eslesme;
     }
 
     @lombok.Getter
@@ -104,8 +131,8 @@ public class SuperAdminController {
         return ip.equals("127.0.0.1") || ip.equals("0:0:0:0:0:0:0:1");
     }
 
-    // SHA-256 — patron şifresi asla düz metin saklanmaz/karşılaştırılmaz
-    private String hashle(String metin) {
+    // SHA-256 — sadece eski patron.hash formatı migrate edilirken kullanılır
+    private String sha256Hashle(String metin) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(metin.getBytes(StandardCharsets.UTF_8));
@@ -136,7 +163,7 @@ public class SuperAdminController {
             return response;
         }
 
-        boolean dogru = patronSifresiHash.equals(hashle(istek.getSifresi()));
+        boolean dogru = sifreDogrula(istek.getSifresi());
         response.put("basarili", dogru);
         response.put("mesaj", dogru ? "Şifre doğrulandı" : "Hatalı şifre!");
 
@@ -167,7 +194,7 @@ public class SuperAdminController {
             return response;
         }
 
-        if (!patronSifresiHash.equals(hashle(istek.getSifresi()))) {
+        if (!sifreDogrula(istek.getSifresi())) {
             response.put("error", "Hatalı şifre!");
             auditLogger.logFailedAdminAttempt(ip, "Davetiye üretme — hatalı şifre");
             return response;
@@ -176,6 +203,7 @@ public class SuperAdminController {
         String yeniKod = "POS-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         DavetiyeKodu davetiye = new DavetiyeKodu();
         davetiye.setKod(yeniKod);
+        davetiye.setSonKullanmaTarihi(LocalDate.now().plusDays(30));
         davetiyeRepo.save(davetiye);
 
         response.put("kod", yeniKod);
@@ -196,7 +224,7 @@ public class SuperAdminController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erişim!");
         }
 
-        if (secret == null || !patronSifresiHash.equals(hashle(secret))) {
+        if (secret == null || !sifreDogrula(secret)) {
             auditLogger.logFailedAdminAttempt(ip, "Yetkisiz market listeleme denemesi");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erişim!");
         }
@@ -219,7 +247,7 @@ public class SuperAdminController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erişim!");
         }
 
-        if (secret == null || !patronSifresiHash.equals(hashle(secret))) {
+        if (secret == null || !sifreDogrula(secret)) {
             auditLogger.logFailedAdminAttempt(ip, "Yetkisiz lisans uzatma denemesi");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erişim!");
         }

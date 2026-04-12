@@ -69,8 +69,9 @@ public class YonetimEkrani {
         Tab personelSekme = new Tab("  👥   Personel  ", personelPaneliOlustur());
         Tab ciroSekme = new Tab("  📊   Ciro  ", ciroPaneliOlustur());
         Tab raporSekme = new Tab("  📈   Rapor  ", raporPaneliOlustur());
+        Tab yedekSekme = new Tab("  💾   Yedek  ", yedekPaneliOlustur());
 
-        sekmeler.getTabs().addAll(urunlerSekme, personelSekme, ciroSekme, raporSekme);
+        sekmeler.getTabs().addAll(urunlerSekme, personelSekme, ciroSekme, raporSekme, yedekSekme);
         VBox.setVgrow(sekmeler, Priority.ALWAYS);
 
         VBox anaLayout = new VBox(0, ustBar, sekmeler);
@@ -810,10 +811,21 @@ public class YonetimEkrani {
                 "-fx-background-color: #3498db; -fx-text-fill: white; " +
                         "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 0 16;");
 
+        Button sifreDegistirBtn = new Button("🔑  Şifremi Değiştir");
+        sifreDegistirBtn.setPrefHeight(38);
+        sifreDegistirBtn.setFont(Font.font("Arial", 13));
+        sifreDegistirBtn.setStyle(
+                "-fx-background-color: #8e44ad; -fx-text-fill: white; " +
+                        "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 0 16;");
+        sifreDegistirBtn.setOnAction(e -> sifreDegistirDialoguAc());
+
+        Region formBosluk2 = new Region();
+        HBox.setHgrow(formBosluk2, Priority.ALWAYS);
+
         HBox ekleFormu = new HBox(12,
                 new Label("Kullanıcı Adı:"), kasiyerAdi,
                 new Label("Şifre:"), kasiyerSifre,
-                ekleBtn, yenileBtn);
+                ekleBtn, yenileBtn, formBosluk2, sifreDegistirBtn);
         ekleFormu.setAlignment(Pos.CENTER_LEFT);
         ekleFormu.setPadding(new Insets(12, 15, 12, 15));
         ekleFormu.setStyle(
@@ -908,6 +920,83 @@ public class YonetimEkrani {
                         bildir("❌ Bağlantı hatası!", "#e74c3c"));
             }
         }).start();
+    }
+
+    private void sifreDegistirDialoguAc() {
+        PasswordField eskiSifreF = new PasswordField();
+        eskiSifreF.setPromptText("Mevcut şifreniz");
+        eskiSifreF.setPrefHeight(36);
+
+        PasswordField yeniSifreF = new PasswordField();
+        yeniSifreF.setPromptText("Yeni şifre (min. 8 karakter)");
+        yeniSifreF.setPrefHeight(36);
+
+        PasswordField yeniSifreTekrarF = new PasswordField();
+        yeniSifreTekrarF.setPromptText("Yeni şifre (tekrar)");
+        yeniSifreTekrarF.setPrefHeight(36);
+
+        Label hataMesaji = new Label("");
+        hataMesaji.setTextFill(Color.web("#e74c3c"));
+        hataMesaji.setFont(Font.font("Arial", 12));
+        hataMesaji.setWrapText(true);
+
+        VBox icerik = new VBox(10,
+                new Label("Mevcut şifre:"), eskiSifreF,
+                new Label("Yeni şifre:"), yeniSifreF,
+                new Label("Yeni şifre tekrar:"), yeniSifreTekrarF,
+                hataMesaji);
+        icerik.setPadding(new Insets(10, 0, 0, 0));
+        icerik.setPrefWidth(320);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Şifre Değiştir");
+        dialog.setHeaderText("Şifrenizi değiştirin — " + ApiClient.getKullaniciAdi());
+        dialog.getDialogPane().setContent(icerik);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        Button okBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.setText("Değiştir");
+        okBtn.setStyle("-fx-background-color: #8e44ad; -fx-text-fill: white;");
+
+        dialog.showAndWait().ifPresent(btn -> {
+            if (btn != ButtonType.OK) return;
+
+            String eski = eskiSifreF.getText();
+            String yeni = yeniSifreF.getText();
+            String tekrar = yeniSifreTekrarF.getText();
+
+            if (eski.isBlank() || yeni.isBlank()) {
+                bildir("❌ Alanlar boş bırakılamaz!", "#e74c3c");
+                return;
+            }
+            if (!yeni.equals(tekrar)) {
+                bildir("❌ Yeni şifreler eşleşmiyor!", "#e74c3c");
+                return;
+            }
+            if (yeni.length() < 8) {
+                bildir("❌ Yeni şifre en az 8 karakter olmalı!", "#e74c3c");
+                return;
+            }
+
+            new Thread(() -> {
+                try {
+                    Map<String, Object> yanit = ApiClient.put(
+                            "/api/kullanicilar/sifre-degistir",
+                            Map.of("eskiSifre", eski, "yeniSifre", yeni));
+                    Platform.runLater(() -> {
+                        String mesaj = yanit.getOrDefault("mesaj", "").toString();
+                        if (mesaj.contains("Başarılı")) {
+                            bildir("✓ Şifreniz başarıyla değiştirildi.", "#27ae60");
+                        } else {
+                            bildir("❌ " + mesaj, "#e74c3c");
+                        }
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() ->
+                            bildir("❌ Hata: " + ex.getMessage(), "#e74c3c"));
+                }
+            }).start();
+        });
     }
 
     // ================================================
@@ -1151,6 +1240,391 @@ public class YonetimEkrani {
         btn.setStyle("-fx-background-color: " + renk + "; -fx-text-fill: white; " +
                 "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 0 14;");
         return btn;
+    }
+
+    // ================================================
+    // YEDEK PANELİ
+    // ================================================
+    private VBox yedekPaneliOlustur() {
+
+        // ── Uyarı bandı ──
+        Label uyariLbl = new Label(
+                "⚠  UYARI: Geri yükleme seçilen tarihe ait anlık görüntüye döner. " +
+                "Bu tarihten sonra yapılan tüm satış ve ürün değişiklikleri kaybolur. " +
+                "Uygulama otomatik olarak yeniden başlayacaktır.");
+        uyariLbl.setFont(Font.font("Arial", 13));
+        uyariLbl.setTextFill(Color.web("#7d6608"));
+        uyariLbl.setWrapText(true);
+
+        HBox uyariBant = new HBox(uyariLbl);
+        uyariBant.setPadding(new Insets(12, 16, 12, 16));
+        uyariBant.setStyle(
+                "-fx-background-color: #fef9e7; " +
+                "-fx-border-color: #f0c000; -fx-border-width: 0 0 1 0;");
+
+        // ── Tablo ──
+        ObservableList<Map<String, Object>> veri = FXCollections.observableArrayList();
+        TableView<Map<String, Object>> tablo = new TableView<>(veri);
+        tablo.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        tablo.setStyle("-fx-font-size: 13px;");
+        tablo.setFixedCellSize(42);
+        tablo.setPlaceholder(new Label("Yedek bulunamadı."));
+        VBox.setVgrow(tablo, Priority.ALWAYS);
+
+        TableColumn<Map<String, Object>, String> turKol = new TableColumn<>("Tür");
+        turKol.setPrefWidth(90);
+        turKol.setCellValueFactory(d ->
+                new javafx.beans.property.SimpleStringProperty(
+                        d.getValue().get("tur").toString()));
+        turKol.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setStyle(""); return; }
+                setText(item);
+                boolean gunluk = "GÜNLÜK".equals(item);
+                setStyle("-fx-alignment: CENTER; -fx-font-weight: bold; " +
+                        "-fx-text-fill: " + (gunluk ? "#1a5276" : "#6e2f01") + ";");
+            }
+        });
+
+        TableColumn<Map<String, Object>, String> tarihKol = new TableColumn<>("Tarih & Saat");
+        tarihKol.setPrefWidth(160);
+        tarihKol.setCellValueFactory(d ->
+                new javafx.beans.property.SimpleStringProperty(
+                        formatliTarih(d.getValue().get("tarih").toString())));
+
+        TableColumn<Map<String, Object>, String> aciklamaKol = new TableColumn<>("Açıklama");
+        aciklamaKol.setPrefWidth(140);
+        aciklamaKol.setCellValueFactory(d ->
+                new javafx.beans.property.SimpleStringProperty(
+                        d.getValue().getOrDefault("aciklama", "").toString()));
+
+        TableColumn<Map<String, Object>, String> boyutKol = new TableColumn<>("Boyut");
+        boyutKol.setPrefWidth(80);
+        boyutKol.setCellValueFactory(d -> {
+            long kb = ((Number) d.getValue().getOrDefault("boyutKB", 0)).longValue();
+            String boyut = kb >= 1024
+                    ? String.format("%.1f MB", kb / 1024.0)
+                    : kb + " KB";
+            return new javafx.beans.property.SimpleStringProperty(boyut);
+        });
+        boyutKol.setStyle("-fx-alignment: CENTER-RIGHT;");
+
+        TableColumn<Map<String, Object>, Void> islemKol = new TableColumn<>("İşlem");
+        islemKol.setPrefWidth(130);
+        islemKol.setCellFactory(col -> new TableCell<>() {
+            final Button btn = new Button("↩  Geri Yükle");
+            {
+                btn.setStyle(
+                        "-fx-background-color: #c0392b; -fx-text-fill: white; " +
+                        "-fx-background-radius: 5; -fx-cursor: hand; " +
+                        "-fx-padding: 5 12; -fx-font-size: 12px; -fx-font-weight: bold;");
+                btn.setOnAction(e -> {
+                    Map<String, Object> satir = getTableView().getItems().get(getIndex());
+                    yedekGeriYukle(satir);
+                });
+            }
+            @Override protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                setGraphic(empty ? null : btn);
+            }
+        });
+
+        tablo.getColumns().addAll(turKol, tarihKol, aciklamaKol, boyutKol, islemKol);
+
+        // ── Üst araç çubuğu ──
+        Label baslik = new Label("Mevcut Yedekler");
+        baslik.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        baslik.setTextFill(Color.web("#2c3e50"));
+
+        Label sayiLbl = new Label();
+        sayiLbl.setFont(Font.font("Arial", 13));
+        sayiLbl.setTextFill(Color.web("#7f8c8d"));
+
+        Button yenileBtn = new Button("🔄  Yenile");
+        yenileBtn.setPrefHeight(36);
+        yenileBtn.setFont(Font.font("Arial", 13));
+        yenileBtn.setStyle(
+                "-fx-background-color: #3498db; -fx-text-fill: white; " +
+                "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 0 16;");
+
+        Region bosluk = new Region();
+        HBox.setHgrow(bosluk, Priority.ALWAYS);
+
+        HBox araçCubugu = new HBox(12, baslik, sayiLbl, bosluk, yenileBtn);
+        araçCubugu.setAlignment(Pos.CENTER_LEFT);
+        araçCubugu.setPadding(new Insets(12, 15, 12, 15));
+        araçCubugu.setStyle(
+                "-fx-background-color: #f8f9fa; " +
+                "-fx-border-color: #dee2e6; -fx-border-width: 0 0 1 0;");
+
+        Runnable yukle = () -> new Thread(() -> {
+            try {
+                java.util.List liste = ApiClient.getList("/api/yedek/liste");
+                Platform.runLater(() -> {
+                    veri.clear();
+                    for (Object o : liste) veri.add((Map<String, Object>) o);
+                    tablo.refresh();
+                    sayiLbl.setText(veri.size() + " yedek");
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> bildir("❌ Yedek listesi yüklenemedi!", "#e74c3c"));
+            }
+        }).start();
+
+        yenileBtn.setOnAction(e -> yukle.run());
+        yukle.run();
+
+        VBox panel = new VBox(0, uyariBant, araçCubugu, tablo, excelBolumuOlustur());
+        VBox.setVgrow(tablo, Priority.ALWAYS);
+        return panel;
+    }
+
+    // ── Excel Yedek Bölümü ──────────────────────────────────────────────────
+    private VBox excelBolumuOlustur() {
+
+        // Başlık çubuğu
+        Label baslik = new Label("📊  Excel Ürün Listesi Yedeği");
+        baslik.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        baslik.setTextFill(Color.web("#1a5276"));
+
+        Label aciklama = new Label(
+                "Her gece 23:59'da otomatik alınır • Son 20 dosya saklanır • " +
+                "Google Drive klasörünü aşağıdaki yola yönlendirin");
+        aciklama.setFont(Font.font("Arial", 12));
+        aciklama.setTextFill(Color.web("#7f8c8d"));
+
+        // Klasör yolu etiketi (endpoint'ten gelecek)
+        Label klasorLbl = new Label("Klasör: yükleniyor...");
+        klasorLbl.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        klasorLbl.setTextFill(Color.web("#2c3e50"));
+        klasorLbl.setWrapText(true);
+
+        Button klasorAcBtn = new Button("📁  Klasörü Aç");
+        klasorAcBtn.setFont(Font.font("Arial", 12));
+        klasorAcBtn.setStyle(
+                "-fx-background-color: #7f8c8d; -fx-text-fill: white; " +
+                "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 4 12;");
+
+        Button excelAlBtn = new Button("📥  Excel Yedek Al");
+        excelAlBtn.setFont(Font.font("Arial", 12));
+        excelAlBtn.setStyle(
+                "-fx-background-color: #27ae60; -fx-text-fill: white; " +
+                "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 4 14;");
+
+        Button yenileExcelBtn = new Button("🔄");
+        yenileExcelBtn.setFont(Font.font("Arial", 12));
+        yenileExcelBtn.setStyle(
+                "-fx-background-color: #3498db; -fx-text-fill: white; " +
+                "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 4 10;");
+
+        Region bosluk = new Region();
+        HBox.setHgrow(bosluk, Priority.ALWAYS);
+
+        HBox araçCubugu = new HBox(10, excelAlBtn, klasorAcBtn, bosluk, yenileExcelBtn);
+        araçCubugu.setAlignment(Pos.CENTER_LEFT);
+        araçCubugu.setPadding(new Insets(8, 15, 8, 15));
+
+        // Küçük Excel listesi tablosu
+        ObservableList<Map<String, Object>> excelVeri = FXCollections.observableArrayList();
+        TableView<Map<String, Object>> excelTablo = new TableView<>(excelVeri);
+        excelTablo.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        excelTablo.setStyle("-fx-font-size: 12px;");
+        excelTablo.setFixedCellSize(36);
+        excelTablo.setPrefHeight(180);
+        excelTablo.setMaxHeight(180);
+        excelTablo.setPlaceholder(new Label("Henüz Excel yedeği yok."));
+
+        TableColumn<Map<String, Object>, String> dosyaKol = new TableColumn<>("Dosya Adı");
+        dosyaKol.setCellValueFactory(d ->
+                new javafx.beans.property.SimpleStringProperty(
+                        d.getValue().get("dosyaAdi").toString()));
+
+        TableColumn<Map<String, Object>, String> excelTarihKol = new TableColumn<>("Tarih");
+        excelTarihKol.setPrefWidth(160);
+        excelTarihKol.setCellValueFactory(d ->
+                new javafx.beans.property.SimpleStringProperty(
+                        formatliTarih(d.getValue().getOrDefault("tarih", "").toString())));
+
+        TableColumn<Map<String, Object>, String> excelBoyutKol = new TableColumn<>("Boyut");
+        excelBoyutKol.setPrefWidth(80);
+        excelBoyutKol.setCellValueFactory(d -> {
+            long kb = ((Number) d.getValue().getOrDefault("boyutKB", 0)).longValue();
+            return new javafx.beans.property.SimpleStringProperty(
+                    kb >= 1024 ? String.format("%.1f MB", kb / 1024.0) : kb + " KB");
+        });
+
+        excelTablo.getColumns().addAll(dosyaKol, excelTarihKol, excelBoyutKol);
+
+        // Listeyi yükle
+        final String[] klasorYolu = {""};
+        Runnable excelListeYukle = () -> new Thread(() -> {
+            try {
+                java.util.List liste = ApiClient.getList("/api/yedek/excel/liste");
+                Platform.runLater(() -> {
+                    excelVeri.clear();
+                    for (Object o : liste) excelVeri.add((Map<String, Object>) o);
+                    excelTablo.refresh();
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> bildir("❌ Excel listesi yüklenemedi!", "#e74c3c"));
+            }
+        }).start();
+
+        // Klasör yolunu al (excel yedeği al endpoint'inden)
+        excelAlBtn.setOnAction(e -> {
+            excelAlBtn.setDisable(true);
+            excelAlBtn.setText("⏳  Hazırlanıyor...");
+            new Thread(() -> {
+                try {
+                    Map<String, Object> sonuc = (Map<String, Object>)
+                            ApiClient.post("/api/yedek/excel", Map.of());
+                    Platform.runLater(() -> {
+                        bildir("✓ " + sonuc.get("mesaj"), "#27ae60");
+                        Object klasor = sonuc.get("klasor");
+                        if (klasor != null) {
+                            klasorLbl.setText("Klasör: " + klasor);
+                            klasorYolu[0] = klasor.toString();
+                        }
+                        excelAlBtn.setDisable(false);
+                        excelAlBtn.setText("📥  Excel Yedek Al");
+                        excelListeYukle.run();
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        bildir("❌ Excel yedeği alınamadı!", "#e74c3c");
+                        excelAlBtn.setDisable(false);
+                        excelAlBtn.setText("📥  Excel Yedek Al");
+                    });
+                }
+            }).start();
+        });
+
+        klasorAcBtn.setOnAction(e -> {
+            String yol = klasorYolu[0];
+            if (yol.isBlank()) {
+                yol = System.getProperty("user.home")
+                        + "\\AppData\\Local\\MarketPOS\\yedek\\excel";
+            }
+            try {
+                java.awt.Desktop.getDesktop().open(new java.io.File(yol));
+            } catch (Exception ex) {
+                bildir("❌ Klasör açılamadı: " + ex.getMessage(), "#e74c3c");
+            }
+        });
+
+        yenileExcelBtn.setOnAction(e -> excelListeYukle.run());
+        excelListeYukle.run();
+
+        // Layout
+        VBox bilgiBandi = new VBox(4, baslik, aciklama, klasorLbl);
+        bilgiBandi.setPadding(new Insets(12, 15, 8, 15));
+        bilgiBandi.setStyle(
+                "-fx-background-color: #eaf4fb; " +
+                "-fx-border-color: #aed6f1; -fx-border-width: 1 0 0 0;");
+
+        VBox bolum = new VBox(0, bilgiBandi, araçCubugu, excelTablo);
+        bolum.setStyle("-fx-border-color: #dee2e6; -fx-border-width: 1 0 0 0;");
+        return bolum;
+    }
+
+    /** "2026-04-09 14:30:00" → "09 Nis 2026  14:30" */
+    private String formatliTarih(String ham) {
+        if (ham == null || ham.isBlank()) return "";
+        try {
+            // ham: "2026-04-09 14:30:00"
+            java.time.LocalDateTime ldt = java.time.LocalDateTime.parse(
+                    ham, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String[] aylar = {"", "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+                               "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"};
+            return String.format("%02d %s %d  %02d:%02d",
+                    ldt.getDayOfMonth(), aylar[ldt.getMonthValue()], ldt.getYear(),
+                    ldt.getHour(), ldt.getMinute());
+        } catch (Exception e) {
+            return ham;
+        }
+    }
+
+    private void yedekGeriYukle(Map<String, Object> satir) {
+        String dosyaAdi  = satir.get("dosyaAdi").toString();
+        String tur       = satir.get("tur").toString();
+        String tarih     = formatliTarih(satir.get("tarih").toString());
+        String aciklama  = satir.getOrDefault("aciklama", "").toString();
+        String format    = satir.getOrDefault("format", "ESKİ").toString();
+
+        // Eski binary format — geri yüklenemiyor
+        if ("ESKİ".equals(format)) {
+            Alert hata = new Alert(Alert.AlertType.ERROR);
+            hata.initOwner(stage);
+            hata.setTitle("Eski Format");
+            hata.setHeaderText("Bu yedek geri yüklenemiyor");
+            hata.setContentText(
+                    "\"" + dosyaAdi + "\" eski binary formatta oluşturulmuş.\n\n" +
+                    "Yeni format yedekler otomatik olarak alınmaya başlandı.\n" +
+                    "Lütfen yeni oluşturulan bir yedeği kullanın.");
+            hata.showAndWait();
+            return;
+        }
+
+        String icerik = "Seçilen yedek:\n"
+                + "  Tür: " + tur + "\n"
+                + "  Tarih: " + tarih + "\n"
+                + (aciklama.isEmpty() ? "" : "  Açıklama: " + aciklama + "\n")
+                + "\n⚠  Bu tarihten sonraki TÜM veriler kaybolacak!\n"
+                + "Uygulama otomatik olarak yeniden başlayacaktır.\n\n"
+                + "Devam etmek istiyor musunuz?";
+
+        Alert onay = new Alert(Alert.AlertType.CONFIRMATION);
+        onay.initOwner(stage);
+        onay.setTitle("Yedek Geri Yükleme Onayı");
+        onay.setHeaderText("⚠  Bu işlem geri alınamaz!");
+        onay.setContentText(icerik);
+        onay.getDialogPane().setPrefWidth(480);
+
+        ButtonType evetBtn  = new ButtonType("✓  Evet, Geri Yükle", ButtonBar.ButtonData.OK_DONE);
+        ButtonType hayirBtn = new ButtonType("İptal", ButtonBar.ButtonData.CANCEL_CLOSE);
+        onay.getButtonTypes().setAll(evetBtn, hayirBtn);
+
+        onay.showAndWait().ifPresent(secim -> {
+            if (secim != evetBtn) return;
+
+            // İkinci onay — önemli işlem olduğu için çift onay
+            Alert kesinOnay = new Alert(Alert.AlertType.WARNING);
+            kesinOnay.initOwner(stage);
+            kesinOnay.setTitle("Son Onay");
+            kesinOnay.setHeaderText("Emin misiniz?");
+            kesinOnay.setContentText(
+                    "\"" + tarih + "\" tarihli yedeğe dönülecek.\n" +
+                    "Uygulama kapanıp yeniden açılacak.");
+            ButtonType kesinEvet = new ButtonType("🔁  Evet, Başlat", ButtonBar.ButtonData.OK_DONE);
+            ButtonType kesinIptal = new ButtonType("Vazgeç", ButtonBar.ButtonData.CANCEL_CLOSE);
+            kesinOnay.getButtonTypes().setAll(kesinEvet, kesinIptal);
+
+            kesinOnay.showAndWait().ifPresent(k -> {
+                if (k != kesinEvet) return;
+                bildir("⏳  Geri yükleme başlatılıyor...", "#2980b9");
+                new Thread(() -> {
+                    try {
+                        ApiClient.post("/api/yedek/geri-yukle",
+                                java.util.Map.of("dosyaAdi", dosyaAdi));
+                        // Cevap gelirse (1500ms içinde) — uygulama zaten kapanıyor
+                        Platform.runLater(() ->
+                                bildir("✓ Başlatıldı. Uygulama kapanıyor...", "#27ae60"));
+                    } catch (Exception ex) {
+                        // Connection refused = uygulama kapandı — normal
+                        String hata = ex.getMessage();
+                        if (hata == null || hata.contains("refused") || hata.contains("reset")) {
+                            // Bağlantı koptu = uygulama kapanıyor, bu beklenen davranış
+                            Platform.runLater(() ->
+                                    bildir("✓ Başlatıldı. Uygulama yeniden başlıyor...", "#27ae60"));
+                        } else {
+                            Platform.runLater(() ->
+                                    bildir("❌ HATA: " + hata, "#e74c3c"));
+                        }
+                    }
+                }).start();
+            });
+        });
     }
 
     // ===== BİLDİRİM — kapatılabilir popup pencere, 4 saniye sonra kapanır =====

@@ -37,7 +37,7 @@ public class PosApplication extends Application {
         configHazirla();
         System.setProperty("java.awt.headless", "false");
 
-        // ✅ CompletableFuture ile Spring başlangıcını güvenli bekle
+        // Spring'i arka planda başlat — JavaFX'i BEKLETME
         Thread springThread = new Thread(() -> {
             try {
                 springCtx = SpringApplication.run(PosApplication.class, args);
@@ -46,13 +46,11 @@ public class PosApplication extends Application {
                 springHazir.completeExceptionally(e);
             }
         });
-        springThread.setDaemon(true);
+        springThread.setDaemon(false); // Spring kapanana kadar JVM çıkmasın
         springThread.setName("spring-main");
         springThread.start();
 
-        // Spring tam başlayana kadar bekle (max 30 sn)
-        springHazir.get(30, java.util.concurrent.TimeUnit.SECONDS);
-
+        // JavaFX'i hemen başlat — yükleniyor ekranı gösterilir
         Application.launch(PosApplication.class, args);
     }
 
@@ -63,30 +61,85 @@ public class PosApplication extends Application {
         stage.setTitle("Market POS Sistemi");
         stage.setMinWidth(500);
         stage.setMinHeight(400);
-
-        // ✅ WebView YOK — direkt native giriş ekranı
-        GirisEkrani girisEkrani = new GirisEkrani(stage);
-        Scene girisScene = girisEkrani.olustur();
-        stage.setScene(girisScene);
         stage.setWidth(500);
         stage.setHeight(400);
-
-        // ✅ GÖREV 5.5: Kayıtlı pencere boyutunu uygula
-        pencereBoyutunuYukle(stage);
         stage.centerOnScreen();
 
-        if (SystemTray.isSupported()) {
-            baslatTray(stage);
-        }
+        // Yükleniyor ekranını hemen göster
+        stage.setScene(yukleniyorSahnesiOlustur());
+        stage.show();
+
+        // Spring hazır olunca giriş ekranına geç
+        springHazir.whenComplete((v, hata) -> Platform.runLater(() -> {
+            if (hata != null) {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                        javafx.scene.control.Alert.AlertType.ERROR);
+                alert.setTitle("Başlatma Hatası");
+                alert.setHeaderText("Uygulama başlatılamadı");
+                alert.setContentText(hata.getMessage());
+                alert.showAndWait();
+                System.exit(1);
+                return;
+            }
+            GirisEkrani girisEkrani = new GirisEkrani(stage);
+            Scene girisScene = girisEkrani.olustur();
+            stage.setScene(girisScene);
+            pencereBoyutunuYukle(stage);
+        }));
 
         stage.setOnCloseRequest(e -> {
             e.consume();
-            // ✅ GÖREV 5.5: Kapatılırken pencere boyutunu kaydet
             pencereBoyutunuKaydet(stage);
-            stage.hide();
+
+            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.CONFIRMATION);
+            alert.initOwner(stage);
+            alert.setTitle("Çıkış");
+            alert.setHeaderText(null);
+            alert.setContentText("Market POS kapatılsın mı?\nKapatılırsa satış yapılamaz.");
+
+            javafx.scene.control.ButtonType evetBtn =
+                    new javafx.scene.control.ButtonType("Evet, Kapat",
+                            javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+            javafx.scene.control.ButtonType hayirBtn =
+                    new javafx.scene.control.ButtonType("Hayır",
+                            javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+
+            alert.getButtonTypes().setAll(evetBtn, hayirBtn);
+
+            alert.showAndWait().ifPresent(secim -> {
+                if (secim == evetBtn) {
+                    if (springCtx != null) springCtx.close();
+                    Platform.exit();
+                    System.exit(0);
+                }
+            });
         });
 
         stage.show();
+    }
+
+    private Scene yukleniyorSahnesiOlustur() {
+        javafx.scene.control.ProgressIndicator spinner =
+                new javafx.scene.control.ProgressIndicator(-1);
+        spinner.setMaxSize(60, 60);
+
+        Label baslik = new Label("MARKET POS");
+        baslik.setFont(javafx.scene.text.Font.font("Arial",
+                javafx.scene.text.FontWeight.BOLD, 22));
+        baslik.setTextFill(javafx.scene.paint.Color.web("#2c3e50"));
+
+        Label alt = new Label("Sistem başlatılıyor...");
+        alt.setFont(javafx.scene.text.Font.font("Arial", 13));
+        alt.setTextFill(javafx.scene.paint.Color.web("#7f8c8d"));
+
+        javafx.scene.layout.VBox kutu = new javafx.scene.layout.VBox(18,
+                baslik, spinner, alt);
+        kutu.setAlignment(javafx.geometry.Pos.CENTER);
+
+        javafx.scene.layout.StackPane root = new javafx.scene.layout.StackPane(kutu);
+        root.setStyle("-fx-background-color: #ecf0f1;");
+        return new Scene(root, 500, 400);
     }
 
     private void pencereBoyutunuYukle(Stage stage) {
@@ -276,7 +329,6 @@ public class PosApplication extends Application {
         System.setProperty("java.io.tmpdir", APPDATA_DIR + "/temp");
         Files.createDirectories(Paths.get(APPDATA_DIR));
 
-        // ✅ GÖREV 3.2: Versiyon dosyası altyapısı
         versiyonDosyasiKontrol();
 
         File configDosya = new File(CONFIG_DOSYASI);
@@ -284,6 +336,21 @@ public class PosApplication extends Application {
             ilkKurulumYap(configDosya);
         }
         configYukle(configDosya);
+
+        // Port çakışması önleme: 8080'den başla, doluysa 8081..8090
+        int port = portBul();
+        System.setProperty("server.port", String.valueOf(port));
+    }
+
+    /** 8080-8090 arasında boş port bulur. */
+    private static int portBul() {
+        for (int p = 8080; p <= 8090; p++) {
+            try (java.net.ServerSocket ss = new java.net.ServerSocket(p)) {
+                ss.setReuseAddress(true);
+                return p;
+            } catch (IOException ignored) {}
+        }
+        return 8080;
     }
 
     private static void versiyonDosyasiKontrol() {
@@ -300,15 +367,17 @@ public class PosApplication extends Application {
 
     private static void ilkKurulumYap(File configDosya) throws IOException {
         Properties props = new Properties();
+
+        // Her kurulum için benzersiz rastgele değerler üret — kaynak kodda YAZILMAZ
         String jwtSecret = UUID.randomUUID().toString().replace("-", "")
                 + UUID.randomUUID().toString().replace("-", "");
-        props.setProperty("JWT_SECRET", jwtSecret);
-        props.setProperty("SSL_KEYSTORE_PASSWORD", "posmarket123");
-        props.setProperty("DB_USERNAME", "pos");
-        props.setProperty("DB_PASSWORD", "pos123");
+        String dbSifresi = UUID.randomUUID().toString().replace("-", "");
 
-        // ✅ Patron şifresi düz metin değil — hash olarak sakla
-        props.setProperty("SUPERADMIN_KEY_HASH", hashle("patron1234"));
+        props.setProperty("JWT_SECRET", jwtSecret);
+        props.setProperty("DB_KULLANICI_SIFRESI", dbSifresi);
+
+        // Patron şifresi düz metin değil — hash olarak sakla
+        props.setProperty("SUPERADMIN_KEY_HASH", hashle("patron123"));
 
         try (OutputStream os = new FileOutputStream(configDosya)) {
             props.store(os, "Market POS - Uygulama Yapilandirmasi\n# BU DOSYAYI SILMEYIN");
@@ -326,7 +395,20 @@ public class PosApplication extends Application {
             }
         }
 
-        // ✅ Environment variable'dan patron şifresi geldiyse hash'le
+        // Eski kurulum migrasyonu: DB_KULLANICI_SIFRESI yoksa config'e ekle.
+        // Eski kurulumlar "pos_db_2024!" ile şifreli DB'ye sahip olduğundan
+        // aynı değeri config'e yazıyoruz. Artık kaynak kodda değil, config.properties'de.
+        // Yeni kurulumlar ilkKurulumYap'ta rastgele değer alır.
+        if (!props.containsKey("DB_KULLANICI_SIFRESI")) {
+            String eskiSifre = "pos_db_2024!"; // Eski hardcoded değer — sadece migrasyon için
+            props.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
+            System.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
+            try (OutputStream os = new FileOutputStream(configDosya)) {
+                props.store(os, "Market POS - Migrasyon guncellendi");
+            }
+        }
+
+        // Environment variable'dan patron şifresi geldiyse hash'le
         String patronKey = System.getenv("SUPERADMIN_KEY");
         if (patronKey != null) {
             System.setProperty("SUPERADMIN_KEY_HASH", hashle(patronKey));

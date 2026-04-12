@@ -102,6 +102,22 @@ public class UrunController {
             throw new IllegalArgumentException("Dosya 5MB'dan büyük olamaz!");
         }
 
+        // CWE-434: MIME type kontrolü — uzantı spoofing'e karşı ek güvence
+        // Not: farklı OS/tarayıcılar aynı CSV için farklı MIME gönderebilir, izin verilenler geniş tutuldu
+        String contentType = dosya.getContentType();
+        if (contentType != null) {
+            String tip = contentType.toLowerCase().split(";")[0].trim();
+            boolean izinli = tip.equals("text/csv")
+                    || tip.equals("text/plain")
+                    || tip.equals("application/csv")
+                    || tip.equals("application/vnd.ms-excel")
+                    || tip.equals("application/octet-stream");
+            if (!izinli) {
+                throw new IllegalArgumentException(
+                        "Geçersiz dosya türü (" + tip + "). Sadece CSV/TXT kabul edilir.");
+            }
+        }
+
         Market market = marketRepository.findById(marketId).orElseThrow();
 
         Map<String, Urun> mevcutUrunHaritasi = urunRepository.findByMarketId(marketId)

@@ -13,11 +13,15 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.util.*;
 
 public class KasaEkrani {
+
+    private static final Logger log = LoggerFactory.getLogger(KasaEkrani.class);
 
     private final Stage stage;
     private TextField barkodField;
@@ -27,6 +31,7 @@ public class KasaEkrani {
     private ObservableList<SepetSatir> sepetVerisi;
     private boolean islemYapiliyor = false;
     private Stage aktifBildirim;
+    private Label urunSayisiLabel;
 
     private final List<String> bulunamayanBarkodlar = new ArrayList<>();
     private Button bulunamayanBtn;
@@ -74,244 +79,150 @@ public class KasaEkrani {
     }
 
     public Scene olustur() {
+        boolean koyu = AyarYoneticisi.isKoyu();
+        String sayfaArka  = koyu ? "#111827" : "#eef1f5";
+        String panelArka  = koyu ? AyarYoneticisi.formRengi() : "#ffffff";
+        String kenarRenk  = koyu ? AyarYoneticisi.kenarlık() : "#e2e8f0";
+        String metin      = AyarYoneticisi.metinRengi();
+        String ikincil    = AyarYoneticisi.ikincilMetin();
+        String bolumStil  = "-fx-border-color: " + kenarRenk + "; -fx-border-width: 0 0 1 0;";
 
-        // ===== ÜST BAR =====
-        Label baslikLabel = new Label("🏪 EXPRESS SATIŞ EKRANI v1.1.0");
-        baslikLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        // ── ÜST BAR ─────────────────────────────────────────────────────────────
+        Label baslikLabel = new Label("🏪  EXPRESS SATIŞ");
+        baslikLabel.setFont(Font.font("Arial", FontWeight.BOLD, 15));
         baslikLabel.setTextFill(Color.WHITE);
 
-        Label kullaniciLabel = new Label("👤 " + ApiClient.getKullaniciAdi());
-        kullaniciLabel.setFont(Font.font("Arial", 11));
-        kullaniciLabel.setTextFill(Color.web("#bdc3c7"));
+        Label versiyon = new Label("v1.4.0");
+        versiyon.setFont(Font.font("Arial", 11));
+        versiyon.setTextFill(Color.web("#475569"));
 
-        String ustBtnStyle =
-                "-fx-background-radius: 5; -fx-cursor: hand; -fx-font-size: 11px; -fx-padding: 4 10;";
+        Label kullaniciLabel = new Label("👤  " + ApiClient.getKullaniciAdi());
+        kullaniciLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        kullaniciLabel.setTextFill(Color.web("#94a3b8"));
+        kullaniciLabel.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 6; -fx-padding: 5 12;");
 
-        Button yonetimBtn = new Button("⚙ Yönetim");
-        yonetimBtn.setStyle("-fx-background-color: #34495e; -fx-text-fill: white; " + ustBtnStyle);
+        String ustBtnStyle = "-fx-background-radius: 6; -fx-cursor: hand; -fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 6 14;";
+
+        bulunamayanBtn = new Button("⚠  Bulunamayan [0]");
+        bulunamayanBtn.setStyle("-fx-background-color: #b45309; -fx-text-fill: white; " + ustBtnStyle);
+        bulunamayanBtn.setVisible(false);
+
+        boolean sesAcik = AyarYoneticisi.isSesAcik();
+        Button sesBtn = new Button(sesAcik ? "🔊  Ses Açık" : "🔇  Ses Kapalı");
+        sesBtn.setStyle("-fx-background-color: " + (sesAcik ? "#166534" : "#374151") + "; -fx-text-fill: white; " + ustBtnStyle);
+        sesBtn.setTooltip(new Tooltip(sesAcik ? "Sesi Kapat" : "Sesi Aç"));
+        sesBtn.setOnAction(e -> {
+            AyarYoneticisi.sesToggle();
+            boolean d = AyarYoneticisi.isSesAcik();
+            sesBtn.setText(d ? "🔊  Ses Açık" : "🔇  Ses Kapalı");
+            sesBtn.setStyle("-fx-background-color: " + (d ? "#166534" : "#374151") + "; -fx-text-fill: white; " + ustBtnStyle);
+        });
+
+        Button temaBtn = new Button(koyu ? "☀  Açık Tema" : "🌙  Koyu Tema");
+        temaBtn.setStyle("-fx-background-color: #334155; -fx-text-fill: white; " + ustBtnStyle);
+        temaBtn.setOnAction(e -> {
+            if (!sepetVerisi.isEmpty()) {
+                Alert onay = new Alert(Alert.AlertType.CONFIRMATION);
+                onay.initOwner(stage);
+                onay.setTitle("Tema Değiştir");
+                onay.setHeaderText(null);
+                onay.setContentText("Tema değişikliği için ekran yeniden yüklenecek.\nSepetteki ürünler silinecek. Devam edilsin mi?");
+                ButtonType devam = new ButtonType("Devam Et", ButtonBar.ButtonData.OK_DONE);
+                ButtonType iptal = new ButtonType("İptal", ButtonBar.ButtonData.CANCEL_CLOSE);
+                onay.getButtonTypes().setAll(devam, iptal);
+                onay.showAndWait().ifPresent(s -> { if (s == devam) { AyarYoneticisi.temaToggle(); stage.setScene(new KasaEkrani(stage).olustur()); } });
+            } else { AyarYoneticisi.temaToggle(); stage.setScene(new KasaEkrani(stage).olustur()); }
+        });
+
+        Button yonetimBtn = new Button("⚙  Yönetim Paneli");
+        yonetimBtn.setStyle("-fx-background-color: #1d4ed8; -fx-text-fill: white; " + ustBtnStyle);
         yonetimBtn.setVisible("ADMIN".equals(ApiClient.getRol()));
         yonetimBtn.setManaged("ADMIN".equals(ApiClient.getRol()));
 
-        bulunamayanBtn = new Button("⚠ Bulunamayan [0]");
-        bulunamayanBtn.setStyle("-fx-background-color: #e67e22; -fx-text-fill: white; " + ustBtnStyle);
-        bulunamayanBtn.setVisible(false);
-
-        Button cikisBtn = new Button("🚪 Çıkış");
-        cikisBtn.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; " + ustBtnStyle);
+        Button cikisBtn = new Button("🚪  Çıkış Yap");
+        cikisBtn.setStyle("-fx-background-color: #be123c; -fx-text-fill: white; " + ustBtnStyle);
 
         Region ustBosluk = new Region();
         HBox.setHgrow(ustBosluk, Priority.ALWAYS);
 
-        HBox ustBar = new HBox(8, baslikLabel, ustBosluk,
-                kullaniciLabel, bulunamayanBtn, yonetimBtn, cikisBtn);
+        HBox solBaslik = new HBox(8, baslikLabel, versiyon);
+        solBaslik.setAlignment(Pos.CENTER_LEFT);
+
+        HBox ustBar = new HBox(10, solBaslik, ustBosluk,
+                kullaniciLabel, bulunamayanBtn, sesBtn, temaBtn, yonetimBtn, cikisBtn);
         ustBar.setAlignment(Pos.CENTER_LEFT);
-        ustBar.setPadding(new Insets(7, 12, 7, 12));
-        ustBar.setStyle("-fx-background-color: #1e2d3d;");
+        ustBar.setPadding(new Insets(10, 16, 10, 16));
+        ustBar.setStyle("-fx-background-color: #0f172a; -fx-border-color: #1e293b; -fx-border-width: 0 0 1 0;");
 
-        // ===== SOL PANEL =====
-        boolean isAdmin = "ADMIN".equals(ApiClient.getRol());
-
-        Label odemeBaslik = new Label("ÖDEME YÖNTEMİ");
-        odemeBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 10));
-        odemeBaslik.setTextFill(Color.web("#95a5a6"));
-        odemeBaslik.setPadding(new Insets(4, 0, 4, 0));
-
-        Button nakitBtn = new Button("💵  Nakit\n[F5]");
-        nakitBtn.setPrefWidth(240);
-        nakitBtn.setPrefHeight(72);
-        nakitBtn.setFont(Font.font("Arial", FontWeight.BOLD, 15));
-        nakitBtn.setStyle(
-                "-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                        "-fx-background-radius: 10; -fx-cursor: hand;");
-        nakitBtn.setWrapText(true);
-        nakitBtn.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        Button kartBtn = new Button("💳  Kredi Kartı\n[F6]");
-        kartBtn.setPrefWidth(240);
-        kartBtn.setPrefHeight(72);
-        kartBtn.setFont(Font.font("Arial", FontWeight.BOLD, 15));
-        kartBtn.setStyle(
-                "-fx-background-color: #2980b9; -fx-text-fill: white; " +
-                        "-fx-background-radius: 10; -fx-cursor: hand;");
-        kartBtn.setWrapText(true);
-        kartBtn.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        Separator sep1 = new Separator();
-        sep1.setPadding(new Insets(6, 0, 6, 0));
-
-        Label islemBaslik = new Label("HIZLI İŞLEMLER");
-        islemBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 10));
-        islemBaslik.setTextFill(Color.web("#95a5a6"));
-        islemBaslik.setPadding(new Insets(4, 0, 4, 0));
-
-        Button sonSilBtn = new Button("⌫  Son Satırı Sil");
-        sonSilBtn.setPrefWidth(240);
-        sonSilBtn.setPrefHeight(40);
-        sonSilBtn.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        sonSilBtn.setStyle(
-                "-fx-background-color: #e67e22; -fx-text-fill: white; " +
-                        "-fx-background-radius: 8; -fx-cursor: hand;");
-
-        Button temizleBtn = new Button("🗑  Sepeti Temizle");
-        temizleBtn.setPrefWidth(240);
-        temizleBtn.setPrefHeight(40);
-        temizleBtn.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        temizleBtn.setStyle(
-                "-fx-background-color: #7f8c8d; -fx-text-fill: white; " +
-                        "-fx-background-radius: 8; -fx-cursor: hand;");
-
-        // Hızlı fiyat güncelleme — tüm roller
-        Button fiyatGuncelleBtn = new Button("✏  Hızlı Fiyat Güncelle  [F2]");
-        fiyatGuncelleBtn.setPrefWidth(240);
-        fiyatGuncelleBtn.setPrefHeight(40);
-        fiyatGuncelleBtn.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        fiyatGuncelleBtn.setStyle(
-                "-fx-background-color: #f39c12; -fx-text-fill: white; " +
-                        "-fx-background-radius: 8; -fx-cursor: hand;");
-
-        Separator sep2 = new Separator();
-        sep2.setPadding(new Insets(6, 0, 6, 0));
-
-        // Hızlı ürünler bölümü
-        Separator sep3 = new Separator();
-        sep3.setPadding(new Insets(4, 0, 4, 0));
-
-        Label hizliBaslikLbl = new Label("HIZLI ÜRÜNLER");
-        hizliBaslikLbl.setFont(Font.font("Arial", FontWeight.BOLD, 10));
-        hizliBaslikLbl.setTextFill(Color.web("#95a5a6"));
-
-        Button hizliEkleBtn = new Button("+");
-        hizliEkleBtn.setPrefSize(22, 22);
-        hizliEkleBtn.setStyle(
-                "-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                "-fx-background-radius: 11; -fx-cursor: hand; " +
-                "-fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 0;");
-        hizliEkleBtn.setTooltip(new Tooltip("Hızlı ürün ekle"));
-
-        Region hizliAra = new Region();
-        HBox.setHgrow(hizliAra, Priority.ALWAYS);
-        HBox hizliBaslikSatiri = new HBox(4, hizliBaslikLbl, hizliAra, hizliEkleBtn);
-        hizliBaslikSatiri.setAlignment(Pos.CENTER_LEFT);
-
-        hizliUrunlerPanel = new FlowPane(4, 4);
-        hizliUrunlerPanel.setPrefWrapLength(252);
-
-        // Son eklenen ürün bilgisi
-        Label sonEklenenBaslik = new Label("SON EKLENEN");
-        sonEklenenBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 9));
-        sonEklenenBaslik.setTextFill(Color.web("#95a5a6"));
-
-        sonEklenenLabel = new Label("—");
-        sonEklenenLabel.setFont(Font.font("Arial", 12));
-        sonEklenenLabel.setTextFill(Color.web("#2c3e50"));
-        sonEklenenLabel.setWrapText(true);
-        sonEklenenLabel.setMaxWidth(230);
-
-        VBox sonEklenenKutu = new VBox(3, sonEklenenBaslik, sonEklenenLabel);
-        sonEklenenKutu.setStyle(
-                "-fx-background-color: #eaf4fb; -fx-background-radius: 7; " +
-                        "-fx-border-color: #aed6f1; -fx-border-radius: 7; " +
-                        "-fx-border-width: 1; -fx-padding: 8;");
-
-        // Toplam kutu
-        Label toplamBaslik = new Label("GENEL TOPLAM");
-        toplamBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 10));
-        toplamBaslik.setTextFill(Color.web("#bdc3c7"));
-
-        toplamLabel = new Label("0,00 TL");
-        toplamLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
-        toplamLabel.setTextFill(Color.web("#2ecc71"));
-
-        VBox toplamKutu = new VBox(4, toplamBaslik, toplamLabel);
-        toplamKutu.setStyle(
-                "-fx-background-color: #1a252f; -fx-background-radius: 10; " +
-                        "-fx-padding: 16; " +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 6, 0, 0, 2);");
-        toplamKutu.setAlignment(Pos.CENTER);
-
-        Region solBosluk = new Region();
-        VBox.setVgrow(solBosluk, Priority.ALWAYS);
-
-        VBox solPanel = new VBox(8,
-                odemeBaslik, nakitBtn, kartBtn,
-                sep1,
-                islemBaslik, sonSilBtn, temizleBtn, sep2, fiyatGuncelleBtn,
-                sep3, hizliBaslikSatiri, hizliUrunlerPanel,
-                sonEklenenKutu,
-                solBosluk, toplamKutu);
-        solPanel.setPadding(new Insets(14));
-        solPanel.setStyle(
-                "-fx-background-color: #f4f6f7; " +
-                        "-fx-border-color: #d5d8dc; -fx-border-width: 0 1 0 0;");
-        solPanel.setPrefWidth(270);
-        solPanel.setMinWidth(270);
-        solPanel.setMaxWidth(270);
-
-        // ===== BARKOD ALANI =====
-        Label barkodLabel = new Label("Barkod");
-        barkodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        barkodLabel.setTextFill(Color.web("#34495e"));
-
-        Label f1Hint = new Label("[F1]");
-        f1Hint.setFont(Font.font("Arial", 11));
-        f1Hint.setTextFill(Color.web("#aab7b8"));
+        // ── BARKOD ALANI (tam genişlik) ──────────────────────────────────────────
+        Label barkodLbl = new Label("🔍");
+        barkodLbl.setFont(Font.font("Arial", 16));
+        barkodLbl.setTextFill(Color.web(koyu ? "#64748b" : "#94a3b8"));
 
         barkodField = new TextField();
         barkodField.setPromptText("Barkod okutun veya  2 * barkod  yazın...");
-        barkodField.setPrefHeight(42);
-        barkodField.setFont(Font.font("Arial", 14));
+        barkodField.setPrefHeight(46);
+        barkodField.setFont(Font.font("Arial", 15));
+        String bfArka = koyu ? AyarYoneticisi.inputArka() : "white";
         barkodField.setStyle(
-                "-fx-border-color: #2980b9; -fx-border-width: 2; " +
-                        "-fx-border-radius: 7; -fx-background-radius: 7; -fx-padding: 6 10;");
+                "-fx-background-color: " + bfArka + "; " +
+                "-fx-control-inner-background: " + bfArka + "; " +
+                "-fx-border-color: #3b82f6; -fx-border-width: 2; " +
+                "-fx-border-radius: 8; -fx-background-radius: 8; -fx-padding: 6 12; " +
+                "-fx-text-fill: " + metin + "; -fx-prompt-text-fill: " + ikincil + ";");
         HBox.setHgrow(barkodField, Priority.ALWAYS);
 
-        Button ekleBtn = new Button("EKLE");
-        ekleBtn.setPrefHeight(42);
-        ekleBtn.setPrefWidth(80);
+        Button ekleBtn = new Button("EKLE ↵");
+        ekleBtn.setPrefHeight(46);
+        ekleBtn.setPrefWidth(100);
         ekleBtn.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        ekleBtn.setStyle(
-                "-fx-background-color: #2980b9; -fx-text-fill: white; " +
-                        "-fx-background-radius: 7; -fx-cursor: hand;");
+        ekleBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; " +
+                "-fx-background-radius: 8; -fx-cursor: hand;");
+        ekleBtn.setOnMouseEntered(e -> ekleBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-background-radius: 8; -fx-cursor: hand;"));
+        ekleBtn.setOnMouseExited(e -> ekleBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-background-radius: 8; -fx-cursor: hand;"));
 
-        HBox barkodSatiri = new HBox(8, barkodLabel, f1Hint, barkodField, ekleBtn);
-        barkodSatiri.setAlignment(Pos.CENTER_LEFT);
-        barkodSatiri.setPadding(new Insets(10, 14, 10, 14));
-        barkodSatiri.setStyle(
-                "-fx-background-color: white; " +
-                        "-fx-border-color: #d5d8dc; -fx-border-width: 0 0 1 0;");
+        HBox barkodAlani = new HBox(10, barkodLbl, barkodField, ekleBtn);
+        barkodAlani.setAlignment(Pos.CENTER_LEFT);
+        barkodAlani.setPadding(new Insets(10, 16, 10, 16));
+        barkodAlani.setStyle("-fx-background-color: " + panelArka + "; " + bolumStil);
 
-        // ===== SEPET TABLOSU =====
+        // ── SEPET TABLOSU ────────────────────────────────────────────────────────
         sepetVerisi = FXCollections.observableArrayList();
         sepetTablosu = new TableView<>(sepetVerisi);
-        sepetTablosu.setPlaceholder(new Label("Sepet boş  —  barkod okutun veya F1'e basın"));
+        Label placeholder = new Label("Sepet boş  —  barkod okutun veya F1'e basın");
+        placeholder.setFont(Font.font("Arial", 13));
+        placeholder.setTextFill(Color.web(ikincil));
+        sepetTablosu.setPlaceholder(placeholder);
         sepetTablosu.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        sepetTablosu.setStyle("-fx-font-size: 13px;");
-        sepetTablosu.setFixedCellSize(38);
+        String tabloStil = "-fx-font-size: 13px;";
+        if (koyu) tabloStil += " -fx-background-color: #1e1e1e; -fx-control-inner-background: #1e1e1e;";
+        sepetTablosu.setStyle(tabloStil);
+        sepetTablosu.setFixedCellSize(40);
         VBox.setVgrow(sepetTablosu, Priority.ALWAYS);
 
-        // Alternating row colors
+        String satirCift = AyarYoneticisi.tabloSatirCift();
+        String satirTek  = AyarYoneticisi.tabloSatirTek();
         sepetTablosu.setRowFactory(tv -> new TableRow<SepetSatir>() {
-            @Override
-            protected void updateItem(SepetSatir item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setStyle("");
+            private void guncelle() {
+                if (getItem() == null || isEmpty()) { setStyle(""); return; }
+                if (koyu) {
+                    String bg = isSelected() ? "#3a3a3a" : (getIndex() % 2 == 0 ? satirCift : satirTek);
+                    setStyle("-fx-background-color: " + bg + "; -fx-text-fill: white;");
                 } else {
-                    setStyle(getIndex() % 2 == 0
-                            ? "-fx-background-color: #ffffff;"
-                            : "-fx-background-color: #f7f9fc;");
+                    String bg = isSelected() ? "#dbeafe" : (getIndex() % 2 == 0 ? satirCift : satirTek);
+                    setStyle("-fx-background-color: " + bg + ";");
                 }
             }
+            { selectedProperty().addListener((o, a, b) -> guncelle()); }
+            @Override protected void updateItem(SepetSatir item, boolean empty) { super.updateItem(item, empty); guncelle(); }
         });
 
-        // Sıra No
         TableColumn<SepetSatir, Integer> siraKol = new TableColumn<>("#");
         siraKol.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(Integer item, boolean empty) {
+            @Override protected void updateItem(Integer item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty ? null : String.valueOf(getIndex() + 1));
-                setStyle("-fx-alignment: CENTER; -fx-text-fill: #95a5a6;");
+                setStyle("-fx-alignment: CENTER; -fx-text-fill: " + ikincil + ";");
             }
         });
         siraKol.setPrefWidth(40);
@@ -319,7 +230,6 @@ public class KasaEkrani {
         TableColumn<SepetSatir, String> barkodKol = new TableColumn<>("Barkod");
         barkodKol.setCellValueFactory(new PropertyValueFactory<>("barkod"));
         barkodKol.setPrefWidth(120);
-        barkodKol.setStyle("-fx-text-fill: #7f8c8d;");
 
         TableColumn<SepetSatir, String> urunKol = new TableColumn<>("Ürün Adı");
         urunKol.setCellValueFactory(new PropertyValueFactory<>("urunAdi"));
@@ -335,8 +245,7 @@ public class KasaEkrani {
         fiyatKol.setPrefWidth(90);
         fiyatKol.setStyle("-fx-alignment: CENTER-RIGHT;");
         fiyatKol.setCellFactory(col -> new TableCell<SepetSatir, BigDecimal>() {
-            @Override
-            protected void updateItem(BigDecimal item, boolean empty) {
+            @Override protected void updateItem(BigDecimal item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null : String.format("%,.2f", item));
             }
@@ -347,68 +256,178 @@ public class KasaEkrani {
         tutarKol.setPrefWidth(105);
         tutarKol.setStyle("-fx-alignment: CENTER-RIGHT; -fx-font-weight: bold;");
         tutarKol.setCellFactory(col -> new TableCell<SepetSatir, BigDecimal>() {
-            @Override
-            protected void updateItem(BigDecimal item, boolean empty) {
+            @Override protected void updateItem(BigDecimal item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null : String.format("%,.2f", item));
-                setStyle("-fx-alignment: CENTER-RIGHT; -fx-font-weight: bold; -fx-text-fill: #1a5276;");
+                String renk = koyu ? "#38bdf8" : "#1e40af";
+                setStyle("-fx-alignment: CENTER-RIGHT; -fx-font-weight: bold; -fx-text-fill: " + renk + ";");
             }
         });
 
-        // Sil butonu kolonu
         TableColumn<SepetSatir, Void> silKol = new TableColumn<>("");
-        silKol.setPrefWidth(48);
+        silKol.setPrefWidth(52);
         silKol.setCellFactory(col -> new TableCell<>() {
             final Button btn = new Button("✕");
             {
-                btn.setStyle(
-                        "-fx-background-color: #fadbd8; -fx-text-fill: #e74c3c; " +
-                                "-fx-background-radius: 4; -fx-cursor: hand; " +
-                                "-fx-padding: 2 7; -fx-font-size: 11px; -fx-font-weight: bold;");
-                btn.setOnMouseEntered(e -> btn.setStyle(
-                        "-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                                "-fx-background-radius: 4; -fx-cursor: hand; " +
-                                "-fx-padding: 2 7; -fx-font-size: 11px; -fx-font-weight: bold;"));
-                btn.setOnMouseExited(e -> btn.setStyle(
-                        "-fx-background-color: #fadbd8; -fx-text-fill: #e74c3c; " +
-                                "-fx-background-radius: 4; -fx-cursor: hand; " +
-                                "-fx-padding: 2 7; -fx-font-size: 11px; -fx-font-weight: bold;"));
-                btn.setOnAction(e -> {
-                    SepetSatir satir = getTableView().getItems().get(getIndex());
-                    sepetVerisi.remove(satir);
-                    toplamGuncelle();
-                    barkodField.requestFocus();
-                });
+                String n = "-fx-background-color: #fee2e2; -fx-text-fill: #dc2626; -fx-background-radius: 5; -fx-cursor: hand; -fx-padding: 4 9; -fx-font-size: 12px; -fx-font-weight: bold;";
+                String h = "-fx-background-color: #dc2626; -fx-text-fill: white; -fx-background-radius: 5; -fx-cursor: hand; -fx-padding: 4 9; -fx-font-size: 12px; -fx-font-weight: bold;";
+                btn.setStyle(n);
+                btn.setOnMouseEntered(e -> btn.setStyle(h));
+                btn.setOnMouseExited(e -> btn.setStyle(n));
+                btn.setOnAction(e -> { sepetVerisi.remove(getTableView().getItems().get(getIndex())); toplamGuncelle(); barkodField.requestFocus(); });
             }
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                setGraphic(empty ? null : btn);
-            }
+            @Override protected void updateItem(Void item, boolean empty) { super.updateItem(item, empty); setGraphic(empty ? null : btn); }
         });
 
-        sepetTablosu.getColumns().addAll(
-                siraKol, barkodKol, urunKol, adetKol, fiyatKol, tutarKol, silKol);
+        sepetTablosu.getColumns().addAll(siraKol, barkodKol, urunKol, adetKol, fiyatKol, tutarKol, silKol);
 
-        // ===== SAĞ İÇ LAYOUT =====
-        VBox sagIcLayout = new VBox(0, barkodSatiri, sepetTablosu);
+        // Tablo altı aksiyon çubuğu
+        String aksBtnBase = "-fx-background-radius: 0; -fx-cursor: hand; -fx-font-size: 13px; -fx-font-weight: bold; -fx-padding: 14 0;";
+        Button sonSilBtn = new Button("⌫   Son Satırı Sil   [Del]");
+        sonSilBtn.setMaxWidth(Double.MAX_VALUE);
+        sonSilBtn.setStyle("-fx-background-color: #ea580c; -fx-text-fill: white; " + aksBtnBase);
+        sonSilBtn.setOnMouseEntered(e -> sonSilBtn.setStyle("-fx-background-color: #c2410c; -fx-text-fill: white; " + aksBtnBase));
+        sonSilBtn.setOnMouseExited(e -> sonSilBtn.setStyle("-fx-background-color: #ea580c; -fx-text-fill: white; " + aksBtnBase));
+
+        Button temizleBtn = new Button("🗑   Tümünü Temizle   [Esc]");
+        temizleBtn.setMaxWidth(Double.MAX_VALUE);
+        temizleBtn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; " + aksBtnBase);
+        temizleBtn.setOnMouseEntered(e -> temizleBtn.setStyle("-fx-background-color: #b91c1c; -fx-text-fill: white; " + aksBtnBase));
+        temizleBtn.setOnMouseExited(e -> temizleBtn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; " + aksBtnBase));
+
+        HBox.setHgrow(sonSilBtn, Priority.ALWAYS);
+        HBox.setHgrow(temizleBtn, Priority.ALWAYS);
+        HBox aksiyonCubugu = new HBox(1, sonSilBtn, temizleBtn);
+        aksiyonCubugu.setStyle("-fx-background-color: " + (koyu ? "#1e1e1e" : "#f1f5f9") + "; " +
+                "-fx-border-color: " + kenarRenk + "; -fx-border-width: 1 0 0 0;");
+
+        VBox tableBox = new VBox(0, sepetTablosu, aksiyonCubugu);
+        tableBox.setStyle("-fx-background-color: " + sayfaArka + ";");
         VBox.setVgrow(sepetTablosu, Priority.ALWAYS);
-        VBox.setVgrow(sagIcLayout, Priority.ALWAYS);
+        VBox.setVgrow(tableBox, Priority.ALWAYS);
 
-        // ===== ANA LAYOUT =====
-        HBox icerik = new HBox(0, solPanel, sagIcLayout);
-        HBox.setHgrow(sagIcLayout, Priority.ALWAYS);
+        // ── SAĞ PANEL ────────────────────────────────────────────────────────────
+        // Yardımcı: bölüm başlık etiketi
+        // -- TOPLAM --
+        urunSayisiLabel = new Label("SEPET BOŞ");
+        urunSayisiLabel.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+        urunSayisiLabel.setTextFill(Color.web(ikincil));
+
+        toplamLabel = new Label("0,00 ₺");
+        toplamLabel.setFont(Font.font("Arial", FontWeight.BOLD, 34));
+        toplamLabel.setTextFill(Color.web("#10b981"));
+
+        VBox toplamBolumu = new VBox(3, urunSayisiLabel, toplamLabel);
+        toplamBolumu.setAlignment(Pos.CENTER);
+        toplamBolumu.setPadding(new Insets(18, 14, 18, 14));
+        String toplamBg = koyu ? "#052e16" : "#f0fdf4";
+        toplamBolumu.setStyle("-fx-background-color: " + toplamBg + "; " + bolumStil);
+
+        // -- ÖDEME BUTONLARI --
+        Button nakitBtn = new Button("💵  NAKİT  [F5]");
+        nakitBtn.setMaxWidth(Double.MAX_VALUE);
+        nakitBtn.setPrefHeight(68);
+        nakitBtn.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        nakitBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;");
+        nakitBtn.setOnMouseEntered(e -> nakitBtn.setStyle("-fx-background-color: #15803d; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+        nakitBtn.setOnMouseExited(e -> nakitBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+
+        Button kartBtn = new Button("💳  KREDİ KARTI  [F6]");
+        kartBtn.setMaxWidth(Double.MAX_VALUE);
+        kartBtn.setPrefHeight(68);
+        kartBtn.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        kartBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;");
+        kartBtn.setOnMouseEntered(e -> kartBtn.setStyle("-fx-background-color: #1d4ed8; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+        kartBtn.setOnMouseExited(e -> kartBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+
+        VBox odemeBolumu = new VBox(10, nakitBtn, kartBtn);
+        odemeBolumu.setPadding(new Insets(14, 14, 14, 14));
+        odemeBolumu.setStyle("-fx-background-color: " + panelArka + "; " + bolumStil);
+
+        // -- SON EKLENEN --
+        Label sonEklenenBaslik = new Label("SON EKLENEN");
+        sonEklenenBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+        sonEklenenBaslik.setTextFill(Color.web(ikincil));
+
+        sonEklenenLabel = new Label("—");
+        sonEklenenLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        sonEklenenLabel.setTextFill(Color.web(metin));
+        sonEklenenLabel.setWrapText(true);
+
+        VBox sonEklenenBolumu = new VBox(4, sonEklenenBaslik, sonEklenenLabel);
+        sonEklenenBolumu.setPadding(new Insets(10, 14, 10, 14));
+        String seArka = koyu ? "#1e293b" : "#f8fafc";
+        sonEklenenBolumu.setStyle("-fx-background-color: " + seArka + "; " + bolumStil);
+
+        // -- SEPET İŞLEMLERİ --
+        // -- HIZLI ÜRÜNLER --
+        Label hizliBaslikLbl = new Label("HIZLI ÜRÜNLER");
+        hizliBaslikLbl.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+        hizliBaslikLbl.setTextFill(Color.web(ikincil));
+
+        Button hizliEkleBtn = new Button("+");
+        hizliEkleBtn.setPrefSize(22, 22);
+        hizliEkleBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-background-radius: 11; -fx-cursor: hand; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 0;");
+        hizliEkleBtn.setTooltip(new Tooltip("Hızlı ürün ekle"));
+
+        Region hizliAra = new Region();
+        HBox.setHgrow(hizliAra, Priority.ALWAYS);
+        HBox hizliBaslikSatiri = new HBox(4, hizliBaslikLbl, hizliAra, hizliEkleBtn);
+        hizliBaslikSatiri.setAlignment(Pos.CENTER_LEFT);
+
+        hizliUrunlerPanel = new FlowPane(6, 6);
+        hizliUrunlerPanel.setPrefWrapLength(280);
+
+        VBox hizliBolumu = new VBox(8, hizliBaslikSatiri, hizliUrunlerPanel);
+        hizliBolumu.setPadding(new Insets(10, 14, 10, 14));
+        hizliBolumu.setStyle("-fx-background-color: " + panelArka + "; " + bolumStil);
+
+        // -- FİYAT GÜNCELLE (alt) --
+        Button fiyatGuncelleBtn = new Button("✏  Hızlı Fiyat Güncelle  [F2]");
+        fiyatGuncelleBtn.setMaxWidth(Double.MAX_VALUE);
+        fiyatGuncelleBtn.setPrefHeight(46);
+        fiyatGuncelleBtn.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        fiyatGuncelleBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;");
+        fiyatGuncelleBtn.setOnMouseEntered(e -> fiyatGuncelleBtn.setStyle("-fx-background-color: #6d28d9; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+        fiyatGuncelleBtn.setOnMouseExited(e -> fiyatGuncelleBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+
+        Region altBosluk = new Region();
+        VBox.setVgrow(altBosluk, Priority.ALWAYS);
+        VBox fiyatBolumu = new VBox(0, altBosluk, fiyatGuncelleBtn);
+        fiyatBolumu.setPadding(new Insets(10, 14, 14, 14));
+        VBox.setVgrow(fiyatBolumu, Priority.ALWAYS);
+
+        // -- SAĞ PANEL BİRLEŞTİR --
+        ScrollPane sagScroll = new ScrollPane();
+        VBox sagPanelIc = new VBox(0,
+                toplamBolumu, odemeBolumu, sonEklenenBolumu, hizliBolumu, fiyatBolumu);
+        VBox.setVgrow(fiyatBolumu, Priority.ALWAYS);
+        sagPanelIc.setStyle("-fx-background-color: " + panelArka + ";");
+        sagScroll.setContent(sagPanelIc);
+        sagScroll.setFitToWidth(true);
+        sagScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        sagScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        sagScroll.setStyle("-fx-background-color: " + panelArka + "; -fx-background: " + panelArka + "; " +
+                "-fx-border-color: " + kenarRenk + "; -fx-border-width: 0 0 0 1;");
+        sagScroll.setPrefWidth(314);
+        sagScroll.setMinWidth(314);
+        sagScroll.setMaxWidth(314);
+
+        // ── ANA LAYOUT ───────────────────────────────────────────────────────────
+        String kisayolBg = koyu ? "#0d1b27" : "#1e293b";
+        HBox icerik = new HBox(0, tableBox, sagScroll);
+        HBox.setHgrow(tableBox, Priority.ALWAYS);
         VBox.setVgrow(icerik, Priority.ALWAYS);
 
-        VBox anaLayout = new VBox(0, ustBar, icerik);
+        VBox anaLayout = new VBox(0, ustBar, barkodAlani, icerik, kisayolCubuguOlustur(kisayolBg));
         VBox.setVgrow(icerik, Priority.ALWAYS);
 
-        // ===== OLAYLAR =====
+        // ── OLAYLAR ──────────────────────────────────────────────────────────────
         barkodField.setOnAction(e -> barkodOkut());
         ekleBtn.setOnAction(e -> barkodOkut());
         nakitBtn.setOnAction(e -> odemeYap("NAKIT", nakitBtn));
         kartBtn.setOnAction(e -> odemeYap("KART", kartBtn));
-        sonSilBtn.setOnAction(e -> sonUrunuSil());
+        sonSilBtn.setOnAction(e -> { sonUrunuSil(); barkodField.requestFocus(); });
         temizleBtn.setOnAction(e -> sepetiTemizle());
         yonetimBtn.setOnAction(e -> yonetimeGec());
         cikisBtn.setOnAction(e -> cikisYap());
@@ -416,19 +435,12 @@ public class KasaEkrani {
         fiyatGuncelleBtn.setOnAction(e -> hizliFiyatGuncelle());
         hizliEkleBtn.setOnAction(e -> hizliUrunEkleDialog());
 
-        // Hover efektleri
-        nakitBtn.setOnMouseEntered(e -> nakitBtn.setStyle(
-                "-fx-background-color: #1e8449; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
-        nakitBtn.setOnMouseExited(e -> nakitBtn.setStyle(
-                "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
-        kartBtn.setOnMouseEntered(e -> kartBtn.setStyle(
-                "-fx-background-color: #1a6ea8; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
-        kartBtn.setOnMouseExited(e -> kartBtn.setStyle(
-                "-fx-background-color: #2980b9; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;"));
-
         Scene scene = new Scene(anaLayout, 1280, 800);
+        if (koyu) {
+            java.net.URL cssUrl = getClass().getResource("/dark-theme.css");
+            if (cssUrl != null) scene.getStylesheets().add(cssUrl.toExternalForm());
+        }
 
-        // Kısayol tuşları
         scene.setOnKeyPressed(e -> {
             switch (e.getCode()) {
                 case F1 -> barkodField.requestFocus();
@@ -443,6 +455,7 @@ public class KasaEkrani {
                         barkodField.requestFocus();
                     }
                 }
+                case ESCAPE -> sepetiTemizle();
             }
         });
 
@@ -495,6 +508,7 @@ public class KasaEkrani {
                         }
                         bulunamayanBtn.setText("⚠  Bulunamayan [" + bulunamayanBarkodlar.size() + "]");
                         bulunamayanBtn.setVisible(true);
+                        ses("hata");
                         bildir("❌  Barkod bulunamadı:  " + finalBarkod, "#e74c3c");
                         barkodField.requestFocus();
                     });
@@ -519,6 +533,7 @@ public class KasaEkrani {
         sepetVerisi.add(yeniSatir);
         toplamGuncelle();
         sepetTablosu.scrollTo(sepetVerisi.size() - 1);
+        ses("basarili");
 
         // Popup yok — sol panelde sessiz güncelleme
         String adetStr = miktar == (long) miktar
@@ -526,7 +541,7 @@ public class KasaEkrani {
                 : String.valueOf(miktar);
         sonEklenenLabel.setText(urunAdi + "\n× " + adetStr + "  =  " +
                 String.format("%,.2f ₺", fiyat.multiply(BigDecimal.valueOf(miktar))));
-        sonEklenenLabel.setTextFill(Color.web("#1a5276"));
+        sonEklenenLabel.setTextFill(Color.web(AyarYoneticisi.isKoyu() ? "#4fc3f7" : "#1a5276"));
     }
 
     // ===== TOPLAMI GÜNCELLE =====
@@ -535,6 +550,10 @@ public class KasaEkrani {
                 .map(SepetSatir::getTutar)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         toplamLabel.setText(String.format("%,.2f ₺", toplam));
+        if (urunSayisiLabel != null) {
+            int adet = sepetVerisi.size();
+            urunSayisiLabel.setText(adet == 0 ? "SEPET BOŞ" : adet + " ÜRÜN");
+        }
     }
 
     // ===== SON ÜRÜNÜ SİL =====
@@ -554,7 +573,7 @@ public class KasaEkrani {
         sepetVerisi.clear();
         toplamGuncelle();
         sonEklenenLabel.setText("—");
-        sonEklenenLabel.setTextFill(Color.web("#2c3e50"));
+        sonEklenenLabel.setTextFill(Color.web(AyarYoneticisi.metinRengi()));
         barkodField.requestFocus();
     }
 
@@ -586,7 +605,7 @@ public class KasaEkrani {
                         sepetVerisi.clear();
                         toplamGuncelle();
                         sonEklenenLabel.setText("—");
-                        sonEklenenLabel.setTextFill(Color.web("#2c3e50"));
+                        sonEklenenLabel.setTextFill(Color.web(AyarYoneticisi.metinRengi()));
                     } else {
                         String hata = yanit.getOrDefault("hata",
                                 yanit.getOrDefault("mesaj", "Hata!")).toString();
@@ -850,7 +869,9 @@ public class KasaEkrani {
     // ===== ÇIKIŞ =====
     private void cikisYap() {
         new Thread(() -> {
-            try { ApiClient.cikisYap(); } catch (Exception ignored) {}
+            try { ApiClient.cikisYap(); } catch (Exception e) {
+                log.debug("Çıkış API çağrısı başarısız (token zaten süresi dolmuş olabilir)", e);
+            }
             Platform.runLater(() -> {
                 GirisEkrani giris = new GirisEkrani(stage);
                 stage.setScene(giris.olustur());
@@ -875,7 +896,9 @@ public class KasaEkrani {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Hızlı ürünler yüklenemedi", e);
+        }
     }
 
     private void hizliUrunleriKaydet() {
@@ -885,7 +908,9 @@ public class KasaEkrani {
             for (String[] u : hizliUrunler) sb.append(u[0]).append("|").append(u[1]).append("\n");
             java.nio.file.Files.writeString(HIZLI_URUNLER_DOSYASI, sb.toString(),
                     java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Hızlı ürünler kaydedilemedi", e);
+        }
     }
 
     private void hizliUrunPaneliniYenile() {
@@ -1145,6 +1170,116 @@ public class KasaEkrani {
         HBox satir = new HBox(8, etiket, alan);
         satir.setAlignment(Pos.CENTER_LEFT);
         return satir;
+    }
+
+    // ===== KISAYOL ÇUBUĞU YARDIMCISI (C) =====
+    private HBox kisayolCubuguOlustur(String arkaRenk) {
+        String[] kisayollar = {
+            "[F1] Barkod Odağı", "[F2] Fiyat Güncelle",
+            "[F5] Nakit Ödeme", "[F6] Kart Ödeme",
+            "[Del] Seçili Satırı Sil", "[Esc] Sepeti Temizle"
+        };
+        HBox cubuk = new HBox(0);
+        cubuk.setAlignment(Pos.CENTER_LEFT);
+        cubuk.setStyle("-fx-background-color: " + arkaRenk + ";");
+        cubuk.setPadding(new Insets(4, 12, 4, 12));
+
+        for (int i = 0; i < kisayollar.length; i++) {
+            String[] parcalar = kisayollar[i].split(" ", 2);
+            Label tus = new Label(parcalar[0]);
+            tus.setFont(Font.font("Monospaced", FontWeight.BOLD, 10));
+            tus.setTextFill(Color.web("#ecf0f1"));
+            tus.setStyle("-fx-background-color: #34495e; -fx-background-radius: 3; " +
+                    "-fx-padding: 1 5;");
+
+            Label aciklama = new Label(" " + (parcalar.length > 1 ? parcalar[1] : ""));
+            aciklama.setFont(Font.font("Arial", 10));
+            aciklama.setTextFill(Color.web("#7f8c8d"));
+
+            cubuk.getChildren().addAll(tus, aciklama);
+            if (i < kisayollar.length - 1) {
+                Label ayrac = new Label("  │  ");
+                ayrac.setFont(Font.font("Arial", 10));
+                ayrac.setTextFill(Color.web("#34495e"));
+                cubuk.getChildren().add(ayrac);
+            }
+        }
+        return cubuk;
+    }
+
+    // ===== SES GERİ BİLDİRİMİ =====
+    private void ses(String tip) {
+        if (!AyarYoneticisi.isSesAcik()) return;
+        new Thread(() -> {
+            try {
+                if ("basarili".equals(tip)) sesBasarali();
+                else if ("hata".equals(tip))  sesHata();
+            } catch (Exception e) {
+                log.warn("Ses çalınamadı: tip={}", tip, e);
+                try { java.awt.Toolkit.getDefaultToolkit().beep(); } catch (Exception ignored) {}
+            }
+        }, "pos-ses").start();
+    }
+
+    /** ses2.wav — başarılı barkod ekleme sesi, kısık ses (-8 dB) */
+    private void sesBasarali() {
+        try (java.io.InputStream raw = getClass().getResourceAsStream("/ses2.wav")) {
+            if (raw == null) {
+                log.warn("ses2.wav bulunamadı");
+                java.awt.Toolkit.getDefaultToolkit().beep();
+                return;
+            }
+            try (javax.sound.sampled.AudioInputStream ais =
+                         javax.sound.sampled.AudioSystem.getAudioInputStream(
+                                 new java.io.BufferedInputStream(raw));
+                 javax.sound.sampled.Clip clip = javax.sound.sampled.AudioSystem.getClip()) {
+                clip.open(ais);
+                // Ses kısma: -8 dB
+                if (clip.isControlSupported(javax.sound.sampled.FloatControl.Type.MASTER_GAIN)) {
+                    javax.sound.sampled.FloatControl gain =
+                            (javax.sound.sampled.FloatControl) clip.getControl(
+                                    javax.sound.sampled.FloatControl.Type.MASTER_GAIN);
+                    gain.setValue(Math.max(gain.getMinimum(), gain.getValue() - 8f));
+                }
+                java.util.concurrent.CountDownLatch bekle = new java.util.concurrent.CountDownLatch(1);
+                clip.addLineListener(evt -> {
+                    if (javax.sound.sampled.LineEvent.Type.STOP.equals(evt.getType()))
+                        bekle.countDown();
+                });
+                clip.start();
+                bekle.await(3, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            log.warn("ses2.wav çalınamadı", e);
+            try { java.awt.Toolkit.getDefaultToolkit().beep(); } catch (Exception ignored) {}
+        }
+    }
+
+    /** ses.wav — Clip + CountDownLatch ile doğru bekleme */
+    private void sesHata() {
+        try (java.io.InputStream raw = getClass().getResourceAsStream("/ses.wav")) {
+            if (raw == null) {
+                log.warn("ses.wav bulunamadı");
+                java.awt.Toolkit.getDefaultToolkit().beep();
+                return;
+            }
+            try (javax.sound.sampled.AudioInputStream ais =
+                         javax.sound.sampled.AudioSystem.getAudioInputStream(
+                                 new java.io.BufferedInputStream(raw));
+                 javax.sound.sampled.Clip clip = javax.sound.sampled.AudioSystem.getClip()) {
+                clip.open(ais);
+                java.util.concurrent.CountDownLatch bekle = new java.util.concurrent.CountDownLatch(1);
+                clip.addLineListener(evt -> {
+                    if (javax.sound.sampled.LineEvent.Type.STOP.equals(evt.getType()))
+                        bekle.countDown();
+                });
+                clip.start();
+                bekle.await(3, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (Exception e) {
+            log.warn("ses.wav çalınamadı", e);
+            try { java.awt.Toolkit.getDefaultToolkit().beep(); } catch (Exception ignored) {}
+        }
     }
 
     // ===== BİLDİRİM POPUP — sadece hatalar ve önemli olaylar için =====

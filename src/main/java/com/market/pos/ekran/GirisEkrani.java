@@ -10,18 +10,57 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 
 public class GirisEkrani {
 
+    private static final Logger log = LoggerFactory.getLogger(GirisEkrani.class);
+
     private static final Path GIRIS_DOSYASI = Paths.get(
             System.getProperty("user.home"), "AppData", "Local", "MarketPOS", "giris.dat");
+
+    // =========================================================
+    // AES-GCM şifreli giriş saklama (CWE-1004 düzeltmesi)
+    // Anahtar: JWT_SECRET'ın SHA-256'sından türetilen 128-bit
+    // JWT_SECRET kurulum başında rastgele üretilir → her kurulum benzersiz anahtar
+    // =========================================================
+    private static final String AES_ALGO = "AES/GCM/NoPadding";
+    private static final SecretKey GIRIS_ANAHTARI = girisAnahtariTuret();
+
+    private static SecretKey girisAnahtariTuret() {
+        try {
+            String jwt = System.getProperty("JWT_SECRET");
+            if (jwt == null || jwt.isBlank()) {
+                // PosApplication her zaman JWT_SECRET'ı config'den yükler.
+                // Buraya düşülüyorsa başlatma sırası bozuktur — güvenli sıfır anahtar döndür.
+                log.error("[GÜVENLİK] JWT_SECRET sistem özelliği bulunamadı — giriş şifreleme devre dışı");
+                return new SecretKeySpec(new byte[16], "AES");
+            }
+            byte[] tam = MessageDigest.getInstance("SHA-256")
+                    .digest((jwt + ":giris-v1").getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(Arrays.copyOf(tam, 16), "AES");
+        } catch (Exception e) {
+            log.error("Giriş şifreleme anahtarı türetilemedi", e);
+            return new SecretKeySpec(new byte[16], "AES");
+        }
+    }
 
     private final Stage stage;
     private TextField kullaniciAdiField;
@@ -34,15 +73,22 @@ public class GirisEkrani {
     }
 
     public Scene olustur() {
+        boolean koyu = AyarYoneticisi.isKoyu();
+        String arkaRenk  = AyarYoneticisi.arkaRengi();
+        String formRenk  = AyarYoneticisi.formRengi();
+        String metinRenk = AyarYoneticisi.metinRengi();
+        String ikincil   = AyarYoneticisi.ikincilMetin();
+        String inputArka = AyarYoneticisi.inputArka();
+        String inputKenar = AyarYoneticisi.inputKenarlık();
 
         // ===== BAŞLIK =====
         Label baslik = new Label("🏪 MARKET POS SİSTEMİ");
         baslik.setFont(Font.font("Arial", FontWeight.BOLD, 22));
-        baslik.setTextFill(Color.web("#2c3e50"));
+        baslik.setTextFill(Color.web(metinRenk));
 
         Label altBaslik = new Label("Sisteme giriş yapın");
         altBaslik.setFont(Font.font("Arial", 13));
-        altBaslik.setTextFill(Color.web("#7f8c8d"));
+        altBaslik.setTextFill(Color.web(ikincil));
 
         VBox baslikKutu = new VBox(5, baslik, altBaslik);
         baslikKutu.setAlignment(Pos.CENTER);
@@ -51,28 +97,36 @@ public class GirisEkrani {
         // ===== KULLANICI ADI =====
         Label kAdiLabel = new Label("Kullanıcı Adı");
         kAdiLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        kAdiLabel.setTextFill(Color.web("#2c3e50"));
+        kAdiLabel.setTextFill(Color.web(metinRenk));
 
         kullaniciAdiField = new TextField();
         kullaniciAdiField.setPromptText("Kullanıcı adınızı girin...");
         kullaniciAdiField.setPrefHeight(40);
         kullaniciAdiField.setFont(Font.font("Arial", 14));
         kullaniciAdiField.setStyle(
-                "-fx-border-color: #bdc3c7; -fx-border-radius: 6; " +
-                        "-fx-background-radius: 6; -fx-padding: 8;");
+                "-fx-border-color: " + inputKenar + "; -fx-border-radius: 6; " +
+                "-fx-background-color: " + inputArka + "; " +
+                "-fx-control-inner-background: " + inputArka + "; " +
+                "-fx-background-radius: 6; -fx-padding: 8; " +
+                "-fx-text-fill: " + metinRenk + "; " +
+                "-fx-prompt-text-fill: " + ikincil + ";");
 
         // ===== ŞİFRE =====
         Label sifreLabel = new Label("Şifre");
         sifreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        sifreLabel.setTextFill(Color.web("#2c3e50"));
+        sifreLabel.setTextFill(Color.web(metinRenk));
 
         sifreField = new PasswordField();
         sifreField.setPromptText("Şifrenizi girin...");
         sifreField.setPrefHeight(40);
         sifreField.setFont(Font.font("Arial", 14));
         sifreField.setStyle(
-                "-fx-border-color: #bdc3c7; -fx-border-radius: 6; " +
-                        "-fx-background-radius: 6; -fx-padding: 8;");
+                "-fx-border-color: " + inputKenar + "; -fx-border-radius: 6; " +
+                "-fx-background-color: " + inputArka + "; " +
+                "-fx-control-inner-background: " + inputArka + "; " +
+                "-fx-background-radius: 6; -fx-padding: 8; " +
+                "-fx-text-fill: " + metinRenk + "; " +
+                "-fx-prompt-text-fill: " + ikincil + ";");
 
         // ===== GİRİŞ BUTONU =====
         girisBtn = new Button("GİRİŞ YAP");
@@ -136,8 +190,27 @@ public class GirisEkrani {
         hataMesaji.setTextFill(Color.web("#e74c3c"));
         hataMesaji.setWrapText(true);
 
+        // ===== TEMA TOGGLE BUTONU =====
+        Button temaBtn = new Button(koyu ? "☀" : "🌙");
+        temaBtn.setFont(Font.font("Arial", 14));
+        temaBtn.setStyle(
+                "-fx-background-color: transparent; -fx-text-fill: " + ikincil + "; " +
+                "-fx-cursor: hand; -fx-border-color: " + inputKenar + "; " +
+                "-fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 4 8;");
+        temaBtn.setTooltip(new Tooltip(koyu ? "Açık Temaya Geç" : "Koyu Temaya Geç"));
+        temaBtn.setOnAction(e -> {
+            AyarYoneticisi.temaToggle();
+            // Ekranı yeni temayla yeniden oluştur
+            stage.setScene(new GirisEkrani(stage).olustur());
+        });
+
+        HBox temaKutu = new HBox(temaBtn);
+        temaKutu.setAlignment(Pos.CENTER_RIGHT);
+        temaKutu.setPadding(new Insets(0, 0, 8, 0));
+
         // ===== FORM LAYOUT =====
         VBox form = new VBox(10,
+                temaKutu,
                 baslikKutu,
                 kAdiLabel, kullaniciAdiField,
                 sifreLabel, sifreField,
@@ -146,15 +219,15 @@ public class GirisEkrani {
                 kayitOlBtn,
                 hataMesaji
         );
-        form.setPadding(new Insets(40));
+        form.setPadding(new Insets(32, 40, 40, 40));
         form.setMaxWidth(380);
         form.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 12; " +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 20, 0, 0, 4);");
+                "-fx-background-color: " + formRenk + "; -fx-background-radius: 12; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 20, 0, 0, 4);");
 
         // ===== ANA LAYOUT =====
         StackPane anaLayout = new StackPane(form);
-        anaLayout.setStyle("-fx-background-color: #ecf0f1;");
+        anaLayout.setStyle("-fx-background-color: " + arkaRenk + ";");
         anaLayout.setPadding(new Insets(60));
 
         // ===== OLAYLAR =====
@@ -199,34 +272,156 @@ public class GirisEkrani {
         return scene;
     }
 
-    // ===== GÜNCELLEME DİYALOGU =====
-    private void guncellemeDiyaloguGoster(GuncellemeService.GuncellemeBilgisi bilgi) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.initOwner(stage);
-        alert.setTitle("Güncelleme Mevcut");
-        alert.setHeaderText("Yeni sürüm: v" + bilgi.yeniSurum()
-                + "   (Mevcut: v" + GuncellemeService.MEVCUT_SURUM + ")");
-
-        String icerik = "Yeni bir Market POS sürümü yayınlandı.";
-        if (!bilgi.surumNotu().isBlank()) {
-            String not = bilgi.surumNotu();
-            if (not.length() > 300) not = not.substring(0, 300) + "...";
-            icerik += "\n\nYenilikler:\n" + not;
+    // ===== LİSANS UYARISI (30 gün ve altı) =====
+    private void lisansUyarisiGoster(long kalanGun) {
+        String mesaj;
+        String renk;
+        if (kalanGun == 0) {
+            mesaj = "⚠  Lisansınız BUGÜN sona eriyor!\nYenileme yapılmazsa yarın giriş yapılamaz.";
+            renk  = "#e74c3c";
+        } else if (kalanGun <= 7) {
+            mesaj = "⚠  Lisansınız " + kalanGun + " gün içinde sona eriyor!\nYenileme için yöneticinizle iletişime geçin.";
+            renk  = "#e74c3c";
+        } else {
+            mesaj = "ℹ  Lisansınız " + kalanGun + " gün içinde sona eriyor.\nYenileme için yöneticinizle iletişime geçin.";
+            renk  = "#e67e22";
         }
-        alert.setContentText(icerik);
 
-        ButtonType simdiGuncelle = new ButtonType("Şimdi Güncelle");
-        ButtonType sonra         = new ButtonType("Sonra", ButtonBar.ButtonData.CANCEL_CLOSE);
-        alert.getButtonTypes().setAll(simdiGuncelle, sonra);
+        Label ikonLbl = new Label(kalanGun <= 7 ? "⚠" : "ℹ");
+        ikonLbl.setFont(Font.font("Arial", 36));
+        ikonLbl.setTextFill(Color.WHITE);
 
-        alert.showAndWait().ifPresent(secim -> {
-            if (secim == simdiGuncelle) {
-                guncellemeBaslat(bilgi.indirmeUrl());
-            }
-        });
+        Label mesajLbl = new Label(mesaj);
+        mesajLbl.setFont(Font.font("Arial", 13));
+        mesajLbl.setTextFill(Color.WHITE);
+        mesajLbl.setWrapText(true);
+
+        HBox icerikKutu = new HBox(14, ikonLbl, mesajLbl);
+        icerikKutu.setAlignment(Pos.CENTER_LEFT);
+        icerikKutu.setPadding(new Insets(18, 20, 18, 20));
+        icerikKutu.setStyle("-fx-background-color: " + renk + "; -fx-background-radius: 8 8 0 0;");
+
+        Button tamam = new Button("Anladım");
+        tamam.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        tamam.setStyle("-fx-background-color: " + renk + "; -fx-text-fill: white; " +
+                "-fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 8 24;");
+
+        HBox butonKutu = new HBox(tamam);
+        butonKutu.setAlignment(Pos.CENTER_RIGHT);
+        butonKutu.setPadding(new Insets(12, 20, 12, 20));
+        butonKutu.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 0 0 8 8;");
+
+        VBox govde = new VBox(0, icerikKutu, butonKutu);
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Lisans Uyarısı");
+        dialog.getDialogPane().setContent(govde);
+        dialog.getDialogPane().getButtonTypes().clear();
+        dialog.getDialogPane().setStyle("-fx-padding: 0; -fx-background-radius: 8;");
+
+        tamam.setOnAction(e -> dialog.close());
+        dialog.showAndWait();
     }
 
-    private void guncellemeBaslat(String indirmeUrl) {
+    // ===== GÜNCELLEME DİYALOGU — Şık sürüm notları (G) =====
+    private void guncellemeDiyaloguGoster(GuncellemeService.GuncellemeBilgisi bilgi) {
+        String mevcutV = GuncellemeService.mevcutSurumOku();
+        String yeniV   = bilgi.yeniSurum();
+
+        // ── Başlık barı ──
+        Label baslikLbl = new Label("Güncelleme Mevcut");
+        baslikLbl.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        baslikLbl.setTextFill(Color.WHITE);
+
+        Label versiyon = new Label("v" + mevcutV + "  →  v" + yeniV);
+        versiyon.setFont(Font.font("Arial", 12));
+        versiyon.setTextFill(Color.web("#a9cce3"));
+
+        VBox baslikKutu = new VBox(3, baslikLbl, versiyon);
+
+        Label roketLbl = new Label("🚀");
+        roketLbl.setFont(Font.font("Arial", 32));
+
+        HBox header = new HBox(14, roketLbl, baslikKutu);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setPadding(new Insets(18, 20, 18, 20));
+        header.setStyle("-fx-background-color: #1a3a5c;");
+
+        // ── Sürüm notları ──
+        VBox notlarKutu = new VBox(6);
+        notlarKutu.setPadding(new Insets(14, 20, 4, 20));
+
+        Label notBaslik = new Label("Bu sürümde neler var:");
+        notBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        notBaslik.setTextFill(Color.web("#2c3e50"));
+        notlarKutu.getChildren().add(notBaslik);
+
+        if (!bilgi.surumNotu().isBlank()) {
+            String[] satirlar = bilgi.surumNotu().split("\n");
+            int gosterilenSatir = 0;
+            for (String satir : satirlar) {
+                String temiz = satir.trim();
+                if (temiz.isBlank()) continue;
+                if (gosterilenSatir >= 8) {
+                    Label devami = new Label("  ... daha fazlası için GitHub'a bakın");
+                    devami.setFont(Font.font("Arial", 11));
+                    devami.setTextFill(Color.web("#7f8c8d"));
+                    notlarKutu.getChildren().add(devami);
+                    break;
+                }
+                // Markdown başlık/madde işaretlerini temizle
+                String gorunen = temiz.replaceFirst("^#+\\s*", "").replaceFirst("^[-*]\\s*", "");
+                Label madde = new Label("  •  " + gorunen);
+                madde.setFont(Font.font("Arial", 12));
+                madde.setTextFill(Color.web("#2c3e50"));
+                madde.setWrapText(true);
+                notlarKutu.getChildren().add(madde);
+                gosterilenSatir++;
+            }
+        } else {
+            Label yokMesaj = new Label("  Sürüm notu bulunmuyor.");
+            yokMesaj.setFont(Font.font("Arial", 12));
+            yokMesaj.setTextFill(Color.web("#7f8c8d"));
+            notlarKutu.getChildren().add(yokMesaj);
+        }
+
+        // ── Butonlar ──
+        Button simdiGuncelle = new Button("⬇  Şimdi Güncelle");
+        simdiGuncelle.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        simdiGuncelle.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
+                "-fx-background-radius: 7; -fx-cursor: hand; -fx-padding: 9 22;");
+
+        Button sonra = new Button("Sonra Hatırlat");
+        sonra.setFont(Font.font("Arial", 13));
+        sonra.setStyle("-fx-background-color: #bdc3c7; -fx-text-fill: #2c3e50; " +
+                "-fx-background-radius: 7; -fx-cursor: hand; -fx-padding: 9 16;");
+
+        HBox butonSatiri = new HBox(10, simdiGuncelle, sonra);
+        butonSatiri.setAlignment(Pos.CENTER_RIGHT);
+        butonSatiri.setPadding(new Insets(14, 20, 18, 20));
+
+        VBox govde = new VBox(0, header, notlarKutu, butonSatiri);
+        govde.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Market POS Güncelleme");
+        dialog.getDialogPane().setContent(govde);
+        dialog.getDialogPane().getButtonTypes().clear();
+        dialog.getDialogPane().setStyle("-fx-padding: 0;");
+        dialog.getDialogPane().setMinWidth(420);
+
+        simdiGuncelle.setOnAction(e -> {
+            dialog.close();
+            guncellemeBaslat(bilgi.indirmeUrl(), bilgi.yeniSurum());
+        });
+        sonra.setOnAction(e -> dialog.close());
+
+        dialog.showAndWait();
+    }
+
+    private void guncellemeBaslat(String indirmeUrl, String yeniSurum) {
         // İlerleme dialogu
         ProgressBar progressBar = new ProgressBar(0);
         progressBar.setPrefWidth(300);
@@ -262,7 +457,7 @@ public class GirisEkrani {
                 });
 
                 // Uygula
-                GuncellemeService.guncellemeUygula();
+                GuncellemeService.guncellemeUygula(yeniSurum);
 
                 Platform.runLater(() -> {
                     dialog.close();
@@ -330,35 +525,59 @@ public class GirisEkrani {
         alert.showAndWait();
     }
 
-    // ===== KAYITLI GİRİŞ YARDIMCI METODLARI =====
-    // Format: base64(kullaniciAdi)|base64(sifre)
+    // =========================================================
+    // KAYITLI GİRİŞ — AES-256/GCM şifreli (CWE-1004 düzeltmesi)
+    // Format: Base64(IV):Base64(AES-GCM(kullaniciAdi + TAB + sifre))
+    // Eski Base64 format (":" içermez) → otomatik temizlenir, kullanıcı yeniden giriş yapar
+    // =========================================================
+
     private void girisKaydet_yaz(String kAdi, String sifre) {
         try {
             Files.createDirectories(GIRIS_DOSYASI.getParent());
-            String enc = Base64.getEncoder().encodeToString(kAdi.getBytes(StandardCharsets.UTF_8))
-                    + "|"
-                    + Base64.getEncoder().encodeToString(sifre.getBytes(StandardCharsets.UTF_8));
+            byte[] iv = new byte[12];
+            new SecureRandom().nextBytes(iv);
+            Cipher cipher = Cipher.getInstance(AES_ALGO);
+            cipher.init(Cipher.ENCRYPT_MODE, GIRIS_ANAHTARI, new GCMParameterSpec(128, iv));
+            byte[] sifreli = cipher.doFinal((kAdi + "\t" + sifre).getBytes(StandardCharsets.UTF_8));
+            String enc = Base64.getEncoder().encodeToString(iv)
+                       + ":" + Base64.getEncoder().encodeToString(sifreli);
             Files.writeString(GIRIS_DOSYASI, enc, StandardCharsets.UTF_8);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("Giriş bilgileri kaydedilemedi", e);
+        }
     }
 
     private String[] girisKaydet_oku() {
         try {
             if (!Files.exists(GIRIS_DOSYASI)) return null;
             String icerik = Files.readString(GIRIS_DOSYASI, StandardCharsets.UTF_8).trim();
-            String[] parcalar = icerik.split("\\|", 2);
-            if (parcalar.length != 2) return null;
-            String kAdi  = new String(Base64.getDecoder().decode(parcalar[0]), StandardCharsets.UTF_8);
-            String sifre = new String(Base64.getDecoder().decode(parcalar[1]), StandardCharsets.UTF_8);
-            if (kAdi.isBlank() || sifre.isBlank()) return null;
-            return new String[]{kAdi, sifre};
-        } catch (Exception ignored) {
+            // Eski format tespiti: ":" içermiyorsa eski düz Base64 — sil, kullanıcı yeniden girecek
+            if (!icerik.contains(":")) {
+                Files.deleteIfExists(GIRIS_DOSYASI);
+                log.debug("Eski giris.dat formatı silindi, AES ile yeniden kaydedilecek");
+                return null;
+            }
+            String[] dosyaParcalari = icerik.split(":", 2);
+            if (dosyaParcalari.length != 2) return null;
+            byte[] iv      = Base64.getDecoder().decode(dosyaParcalari[0]);
+            byte[] sifreli = Base64.getDecoder().decode(dosyaParcalari[1]);
+            Cipher cipher  = Cipher.getInstance(AES_ALGO);
+            cipher.init(Cipher.DECRYPT_MODE, GIRIS_ANAHTARI, new GCMParameterSpec(128, iv));
+            String metin = new String(cipher.doFinal(sifreli), StandardCharsets.UTF_8);
+            String[] parcalar = metin.split("\t", 2);
+            if (parcalar.length != 2 || parcalar[0].isBlank() || parcalar[1].isBlank()) return null;
+            return parcalar;
+        } catch (Exception e) {
+            log.debug("Giriş bilgileri okunamadı, temizleniyor", e);
+            try { Files.deleteIfExists(GIRIS_DOSYASI); } catch (Exception ignored) {}
             return null;
         }
     }
 
     private void girisKaydetmeyiSil() {
-        try { Files.deleteIfExists(GIRIS_DOSYASI); } catch (Exception ignored) {}
+        try { Files.deleteIfExists(GIRIS_DOSYASI); } catch (Exception e) {
+            log.debug("Giriş dosyası silinemedi", e);
+        }
     }
 
     private void kayitEkraniAc() {
@@ -397,7 +616,24 @@ public class GirisEkrani {
                     // Başarılı giriş → bilgileri kaydet (her seferinde güncelle)
                     girisKaydet_yaz(kAdi, sifre);
 
+                    // Lisans bitiş tarihi kontrolü — 30 gün içindeyse uyar
+                    long kalanGun = -1;
+                    try {
+                        Object lisansObj = yanit.get("lisansBitisTarihi");
+                        if (lisansObj != null) {
+                            LocalDate bitisTarihi = LocalDate.parse(lisansObj.toString());
+                            kalanGun = ChronoUnit.DAYS.between(LocalDate.now(), bitisTarihi);
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Lisans tarihi okunamadı", ex);
+                    }
+                    final long kalanGunFinal = kalanGun;
+
                     Platform.runLater(() -> {
+                        // Lisans uyarısı varsa önce göster
+                        if (kalanGunFinal >= 0 && kalanGunFinal <= 30) {
+                            lisansUyarisiGoster(kalanGunFinal);
+                        }
                         // Kasa ekranına geç
                         KasaEkrani kasaEkrani = new KasaEkrani(stage);
                         Scene kasaSahne = kasaEkrani.olustur();

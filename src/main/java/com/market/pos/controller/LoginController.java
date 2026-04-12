@@ -44,6 +44,12 @@ public class LoginController {
             throw new IllegalArgumentException("Girdiğiniz davetiye kodu sistemde bulunamadı!");
         }
 
+        // Davetiye süresi dolmuş mu?
+        if (davetiye.getSonKullanmaTarihi() != null
+                && LocalDate.now().isAfter(davetiye.getSonKullanmaTarihi())) {
+            throw new IllegalArgumentException("Bu davetiye kodunun süresi dolmuştur!");
+        }
+
         // ✅ DÜZELTİLDİ: Tek atomik sorguda hem kontrol hem işaretleme
         // Aynı anda gelen iki kayıt isteği artık aynı kodu paylaşamaz
         int guncellenen = davetiyeKoduRepository.kullanildiOlarakIsaretle(istek.getDavetiyeKodu().trim());
@@ -74,6 +80,7 @@ public class LoginController {
     }
 
     @PostMapping("/giris")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public Map<String, Object> girisYap(@Valid @RequestBody LoginIstegi istek,
                                         HttpServletRequest request) {
 
@@ -91,6 +98,13 @@ public class LoginController {
             throw new IllegalArgumentException("Hatalı kullanıcı adı veya şifre!");
         }
 
+        // Lisans sona ermiş mi?
+        java.time.LocalDate bitisTarihi = bulunanKullanici.getMarket().getLisansBitisTarihi();
+        if (bitisTarihi != null && java.time.LocalDate.now().isAfter(bitisTarihi)) {
+            throw new IllegalArgumentException(
+                    "Lisansınız " + bitisTarihi + " tarihinde sona erdi. Yenileme için iletişime geçin.");
+        }
+
         String token = jwtUtil.tokenOlustur(
                 bulunanKullanici.getKullaniciAdi(),
                 bulunanKullanici.getRol(),
@@ -102,6 +116,8 @@ public class LoginController {
         yanit.put("token", token);
         yanit.put("rol", bulunanKullanici.getRol());
         yanit.put("marketId", bulunanKullanici.getMarket().getId());
+        // Lisans bitiş tarihi — istemci 30 gün uyarısı için kullanır
+        yanit.put("lisansBitisTarihi", bulunanKullanici.getMarket().getLisansBitisTarihi().toString());
 
         return yanit;
     }

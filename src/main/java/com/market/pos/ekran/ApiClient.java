@@ -10,15 +10,17 @@ import java.util.Map;
 
 public class ApiClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL =
+            "http://localhost:" + System.getProperty("server.port", "8080");
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
 
     // JWT token — giriş yapınca buraya kaydedilir
-    private static String jwtToken = null;
-    private static Long marketId = null;
-    private static String kullaniciAdi = null;
-    private static String rol = null;
+    // volatile: JavaFX UI thread ve arka plan thread'ler arasında görünürlük garantisi
+    private static volatile String jwtToken = null;
+    private static volatile Long marketId = null;
+    private static volatile String kullaniciAdi = null;
+    private static volatile String rol = null;
 
     // ===================== TOKEN YÖNETİMİ =====================
 

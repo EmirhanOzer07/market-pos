@@ -105,6 +105,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Apache POI — Excel (.xlsx) oluşturma -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -140,15 +147,11 @@
                     <name>MarketPOS</name>
                     <appVersion>1.0.0</appVersion>
                     <vendor>Market POS</vendor>
-                    <destination>target/installer</destination>
-                    <input>target</input>
+                    <destination>C:/MarketPOS-build</destination>
+                    <input>target/app-input</input>
                     <mainJar>pos-0.0.1-SNAPSHOT.jar</mainJar>
                     <mainClass>com.market.pos.PosApplication</mainClass>
-                    <type>EXE</type>
-                    <winDirChooser>true</winDirChooser>
-                    <winShortcut>true</winShortcut>
-                    <winMenu>true</winMenu>
-                    <winMenuGroup>MarketPOS</winMenuGroup>
+                    <type>APP_IMAGE</type>
                     <javaOptions>
                         <option>-Xmx256m</option>
                         <option>-Dfile.encoding=UTF-8</option>

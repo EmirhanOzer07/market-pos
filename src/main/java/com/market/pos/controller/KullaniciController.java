@@ -1,6 +1,7 @@
 package com.market.pos.controller;
 
 import com.market.pos.dto.KasiyerEkleIstegi;
+import com.market.pos.dto.SifreDegistirIstek;
 import com.market.pos.entity.Kullanici;
 import com.market.pos.entity.Market;
 import com.market.pos.entity.Satis;
@@ -74,6 +75,24 @@ public class KullaniciController {
 
         auditLogger.logUserCreation(yeniKasiyer.getKullaniciAdi(), aktif.getKullaniciAdi());
 
+        return "Başarılı";
+    }
+
+    @PutMapping("/sifre-degistir")
+    @PreAuthorize("isAuthenticated()")
+    public String sifreDegistir(@RequestBody SifreDegistirIstek istek) {
+        Kullanici aktif = getAktifKullanici();
+
+        if (istek.getEskiSifre() == null || !passwordEncoder.matches(istek.getEskiSifre(), aktif.getSifre())) {
+            throw new IllegalArgumentException("Mevcut şifre hatalı!");
+        }
+        if (istek.getYeniSifre() == null || istek.getYeniSifre().length() < 8) {
+            throw new IllegalArgumentException("Yeni şifre en az 8 karakter olmalı!");
+        }
+
+        aktif.setSifre(passwordEncoder.encode(istek.getYeniSifre()));
+        kullaniciRepository.save(aktif);
+        auditLogger.logUserCreation(aktif.getKullaniciAdi() + " [şifre değiştirdi]", aktif.getKullaniciAdi());
         return "Başarılı";
     }
 

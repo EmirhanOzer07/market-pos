@@ -8,8 +8,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
-import java.io.File;
+import java.io.*;
 import java.nio.file.*;
+import java.util.zip.*;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -86,9 +87,8 @@ public class YedekService {
                 log.error("[YEDEK] Güvenlik: geçersiz yol engellendi");
                 return;
             }
-            try (Connection conn = dataSource.getConnection();
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("BACKUP TO '" + hedef + "'");
+            try (Connection conn = dataSource.getConnection()) {
+                sqlYedekAlVeZiple(conn, hedef);
             }
             log.info("[YEDEK] Günlük yedek alındı: {}", hedef.getFileName());
             eskiYedekleriTemizle(GUNLUK_KLASORU, "gunluk_", MAX_GUNLUK_YEDEK);
@@ -121,9 +121,8 @@ public class YedekService {
                 log.error("[YEDEK] Güvenlik: geçersiz yol engellendi");
                 return;
             }
-            try (Connection conn = dataSource.getConnection();
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("BACKUP TO '" + hedef + "'");
+            try (Connection conn = dataSource.getConnection()) {
+                sqlYedekAlVeZiple(conn, hedef);
             }
             log.info("[YEDEK] İşlem yedeği alındı: islem_{}_{}.zip", tarih, temizSebep);
             eskiYedekleriTemizle(ISLEM_KLASORU, "islem_", MAX_ISLEM_YEDEK);
@@ -157,6 +156,33 @@ public class YedekService {
             }
         } catch (Exception e) {
             log.warn("[YEDEK] Yedek temizleme hatası: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * H2'nin SCRIPT TO'su plain SQL üretir — ZIP değil.
+     * Bu metot SQL'i önce temp dosyaya yazar, sonra gerçek ZIP içine koyar.
+     * ZIP entry adı: script.sql  → YedekController.sqlFormatMi() bunu kontrol eder.
+     */
+    private void sqlYedekAlVeZiple(Connection conn, Path zipHedef) throws Exception {
+        Path tempSql = zipHedef.resolveSibling(
+                zipHedef.getFileName().toString().replace(".zip", "_temp.sql"));
+        try {
+            // 1. SQL export
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("SCRIPT TO '" + tempSql.toString().replace("\\", "/") + "'");
+            }
+            // 2. ZIP içine koy (DEFLATE sıkıştırma)
+            try (ZipOutputStream zos = new ZipOutputStream(
+                         new BufferedOutputStream(Files.newOutputStream(zipHedef)));
+                 InputStream sqlIn = new BufferedInputStream(Files.newInputStream(tempSql))) {
+                zos.setLevel(Deflater.BEST_COMPRESSION);
+                zos.putNextEntry(new ZipEntry("script.sql"));
+                sqlIn.transferTo(zos);
+                zos.closeEntry();
+            }
+        } finally {
+            Files.deleteIfExists(tempSql);
         }
     }
 }

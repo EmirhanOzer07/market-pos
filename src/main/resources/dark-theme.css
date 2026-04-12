@@ -1,0 +1,56 @@
+/* Koyu tema — TableView özel stilleri */
+
+/* Genel tablo arka planı */
+.table-view {
+    -fx-background-color: #1e1e1e;
+    -fx-control-inner-background: #1e1e1e;
+    -fx-table-cell-border-color: #2d2d2d;
+}
+
+/* Sütun başlık arka planı */
+.table-view .column-header-background {
+    -fx-background-color: #2a2a2a;
+}
+.table-view .column-header, .table-view .filler {
+    -fx-background-color: #2a2a2a;
+    -fx-border-color: #3a3a3a;
+    -fx-border-width: 0 1 1 0;
+}
+
+/* Sütun başlık metin rengi */
+.table-view .column-header .label {
+    -fx-text-fill: #cccccc;
+    -fx-font-weight: bold;
+}
+
+/* Placeholder metin */
+.table-view .placeholder .label {
+    -fx-text-fill: #8e8e93;
+}
+
+/* Hücre kenarlıkları */
+.table-view .table-cell {
+    -fx-border-color: transparent transparent #2d2d2d transparent;
+}
+
+/* Scrollbar arka plan */
+.table-view .scroll-bar:vertical,
+.table-view .scroll-bar:horizontal {
+    -fx-background-color: #1e1e1e;
+}
+.table-view .scroll-bar .thumb {
+    -fx-background-color: #48484a;
+    -fx-background-radius: 4;
+}
+.table-view .scroll-bar .track {
+    -fx-background-color: #1e1e1e;
+}
+.table-view .scroll-bar .increment-button,
+.table-view .scroll-bar .decrement-button {
+    -fx-background-color: #2a2a2a;
+}
+
+/* Corner (sağ üst köşe) */
+.table-view .corner {
+    -fx-background-color: #2a2a2a;
+}
