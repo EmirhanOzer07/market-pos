@@ -12,7 +12,7 @@ public class SepetUrunDTO {
     private Long id;
     private String barkod;
 
-    // ✅ DÜZELTİLDİ: Negatif ve sıfır adet artık reddediliyor
+    
     @NotNull(message = "Adet boş olamaz!")
     @DecimalMin(value = "0.001", message = "Adet sıfır veya negatif olamaz!")
     private Double adet;

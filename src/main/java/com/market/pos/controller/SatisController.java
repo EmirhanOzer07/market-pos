@@ -45,7 +45,7 @@ public class SatisController {
 
         Market market = kasiyer.getMarket();
 
-        // ✅ Lisans kontrolü — süresi dolan markette satış yapılamaz
+        // Lisans süresi dolan markette satış yapılamaz
         if (market.getLisansBitisTarihi() != null &&
                 market.getLisansBitisTarihi().isBefore(java.time.LocalDate.now())) {
             throw new IllegalArgumentException(
@@ -53,15 +53,14 @@ public class SatisController {
                     " tarihinde sona erdi. Satış yapılamaz!");
         }
 
-        // ✅ Ödeme tipi validasyonu — sadece NAKIT ve KART kabul edilir
+        // Sadece NAKIT ve KART kabul edilir
         String odemeTipi = istek.getOdemeTipi();
         if (!"NAKIT".equals(odemeTipi) && !"KART".equals(odemeTipi)) {
             throw new IllegalArgumentException(
                     "Geçersiz ödeme tipi: '" + odemeTipi + "'. Sadece NAKIT veya KART kabul edilir.");
         }
 
-        // ✅ DÜZELTİLDİ: Tek döngüde hem doğrulama hem toplam hesaplama
-        // Artık "toplamda var ama detayda yok" tutarsızlığı oluşmuyor
+        // Tek döngüde doğrulama ve toplam hesaplama — tutarlılık garantisi
         BigDecimal toplamTutar = BigDecimal.ZERO;
         List<Urun> dogrulanmisUrunler = new ArrayList<>();
         List<Double> adetler = new ArrayList<>();
@@ -116,7 +115,6 @@ public class SatisController {
         );
         yedekService.yedekAl("satis");
 
-        // ✅ Her zaman tutarlı JSON Map döner
         Map<String, Object> yanit = new HashMap<>();
         yanit.put("mesaj", "Başarılı");
         yanit.put("satisId", kaydedilenSatis.getId());

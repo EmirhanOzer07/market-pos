@@ -9,5 +9,5 @@ import java.util.List;
 public class SatisIstegi {
     private String odemeTipi;
     private List<SepetUrunDTO> sepet;
-    // marketId ve aktifKullanici kaldırıldı ✅
+    
 }

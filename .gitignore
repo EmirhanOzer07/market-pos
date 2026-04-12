@@ -1,33 +1,90 @@
-HELP.md
+# ============================================================
+# Maven
+# ============================================================
 target/
-.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
+# ============================================================
+# Sensitive & runtime files — NEVER commit these
+# ============================================================
+# H2 database files (stored in AppData, safety net)
+*.mv.db
+*.trace.db
 
-### IntelliJ IDEA ###
-.idea
+# Per-installation encryption key — must not be shared
+*.dbkey
+
+# Password hashes & per-installation config
+patron.hash
+config.properties
+
+# Log files
+*.log
+logs/
+
+# Auto-update artifacts
+guncelleme/
+.installed_version
+MarketPOS-yeni.jar
+
+# Pending restore flag
+pending_restore.flag
+
+# Temporary migration/restore SQL files
+*.bak
+restore_temp.sql
+migrasyon_temp.sql
+
+# ============================================================
+# Distribution / packaged app (large binaries)
+# ============================================================
+dist/
+
+# ============================================================
+# IDE — IntelliJ IDEA
+# ============================================================
+.idea/
 *.iws
 *.iml
 *.ipr
 
-### NetBeans ###
+# ============================================================
+# IDE — Eclipse / STS
+# ============================================================
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+# ============================================================
+# IDE — VS Code
+# ============================================================
+.vscode/
+
+# ============================================================
+# IDE — NetBeans
+# ============================================================
 /nbproject/private/
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
-.vscode/
+# ============================================================
+# OS
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# Claude Code (AI assistant config — local only)
+# ============================================================
+.claude/

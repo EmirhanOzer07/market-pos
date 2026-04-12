@@ -50,8 +50,7 @@ public class LoginController {
             throw new IllegalArgumentException("Bu davetiye kodunun süresi dolmuştur!");
         }
 
-        // ✅ DÜZELTİLDİ: Tek atomik sorguda hem kontrol hem işaretleme
-        // Aynı anda gelen iki kayıt isteği artık aynı kodu paylaşamaz
+        // Tek atomik UPDATE ile hem "kullanılmamış mı?" kontrolü hem işaretleme yapılır
         int guncellenen = davetiyeKoduRepository.kullanildiOlarakIsaretle(istek.getDavetiyeKodu().trim());
         if (guncellenen == 0) {
             throw new IllegalArgumentException("Bu davetiye kodu daha önce başka bir market tarafından kullanılmış!");
@@ -66,7 +65,7 @@ public class LoginController {
         // 3. Market ve kullanıcıyı kaydet
         Market yeniMarket = new Market();
         yeniMarket.setMarketAdi(istek.getMarketAdi().trim());
-        yeniMarket.setLisansBitisTarihi(LocalDate.now().plusYears(1)); // ✅ EKLENDİ
+        yeniMarket.setLisansBitisTarihi(LocalDate.now().plusYears(1));
         marketRepository.save(yeniMarket);
 
         Kullanici yeniAdmin = new Kullanici();

@@ -9,7 +9,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 @EnableCaching
 public class AppConfig {
 
-    // ✅ Doğru yer: Config sınıfı içinde
+
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

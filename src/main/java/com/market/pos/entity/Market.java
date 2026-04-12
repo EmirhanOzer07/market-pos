@@ -5,6 +5,12 @@ import lombok.Getter;
 import lombok.Setter;
 import java.time.LocalDate;
 
+/**
+ * Sisteme kayıtlı bir marketi temsil eder.
+ *
+ * <p>Her market, bir davetiye kodu kullanılarak kayıt sırasında oluşturulur.
+ * Lisans bitiş tarihi aşıldığında giriş engellenir; yenileme için PATRON yetkisi gerekir.
+ */
 @Getter
 @Setter
 @Entity
@@ -15,12 +21,11 @@ public class Market {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Marketin görünen adı. */
     @Column(nullable = false)
     private String marketAdi;
 
+    /** Lisansın sona erdiği tarih. Bu tarihten sonra giriş yapılamaz. */
     @Column(nullable = false)
     private LocalDate lisansBitisTarihi;
-
-    // ✅ davetiyeKodu KALDIRILDI — DavetiyeKodu entity'si üzerinden yönetiliyor,
-    // bu alan hem kullanılmıyordu hem de DB'de boş unique index tutuyordu.
 }

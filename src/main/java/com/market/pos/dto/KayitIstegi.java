@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 public class KayitIstegi {
 
-    @NotBlank(message = "Kullanıcı adı boş olamaz!")   // ✅ EKLENDİ
+    @NotBlank(message = "Kullanıcı adı boş olamaz!")
     @Size(min = 3, max = 50, message = "Kullanıcı adı 3-50 karakter olmalı!")
     private String kullaniciAdi;
 
@@ -17,7 +17,7 @@ public class KayitIstegi {
     @Size(min = 8, max = 100, message = "Şifre en az 8 karakter olmalı!")
     private String sifre;
 
-    @NotBlank(message = "Market adı boş olamaz!")       // ✅ EKLENDİ
+    @NotBlank(message = "Market adı boş olamaz!")
     @Size(min = 2, max = 100, message = "Market adı 2-100 karakter olmalı!")
     private String marketAdi;
 

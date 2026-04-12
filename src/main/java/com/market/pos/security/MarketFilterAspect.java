@@ -23,7 +23,7 @@ public class MarketFilterAspect {
     @Autowired
     private KullaniciRepository kullaniciRepository;
 
-    // ✅ DÜZELTİLDİ: Aynı request içinde filtre zaten set edildiyse DB'ye tekrar gitme
+    
     // Her repository çağrısında 1 ekstra sorgu yapılıyordu — bu ThreadLocal ile engellendi
     private static final ThreadLocal<Boolean> filtreAktif = ThreadLocal.withInitial(() -> false);
 
@@ -33,7 +33,7 @@ public class MarketFilterAspect {
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public void marketFiltresiniAktifEt() {
 
-        // ✅ Bu request'te filtre zaten aktifleştirildiyse tekrar yapma
+        // Aynı request içinde tekrar çalışmayı önle
         if (filtreAktif.get()) {
             return;
         }
@@ -56,12 +56,12 @@ public class MarketFilterAspect {
                 session.enableFilter("marketFilter")
                         .setParameter("marketId", aktifKullanici.getMarket().getId());
 
-                filtreAktif.set(true); // ✅ Bu request için işaretlendi
+                filtreAktif.set(true);
             }
         }
     }
 
-    // ✅ Request bitince ThreadLocal'i temizle — bellek sızıntısı olmaz
+    // Request bitince ThreadLocal temizlenir — bellek sızıntısı olmaz
     // Bu metodun çağrılması için SecurityConfig'e bir filter eklemek gerekiyor (aşağıya bak)
     public static void filtreTemizle() {
         filtreAktif.remove();

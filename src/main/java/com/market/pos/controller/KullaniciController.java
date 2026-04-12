@@ -35,8 +35,7 @@ public class KullaniciController {
     }
 
     @GetMapping("/liste/{marketId}")
-    @PreAuthorize("isAuthenticated()")  // ✅ Spring güvence altına alır
-    public List<Kullanici> personelleriGetir(@PathVariable Long marketId) {
+    @PreAuthorize("isAuthenticated()")    public List<Kullanici> personelleriGetir(@PathVariable Long marketId) {
         Kullanici aktif = getAktifKullanici();
         if (!aktif.getMarket().getId().equals(marketId)) {
             throw new SecurityException("Başka marketin personelini göremezsiniz!");
@@ -45,8 +44,7 @@ public class KullaniciController {
     }
 
     @PostMapping("/ekle/{marketId}")
-    @PreAuthorize("hasRole('ADMIN')")  // ✅ Manuel kontrol yerine Spring halleder
-    public String kasiyerEkle(@PathVariable Long marketId, @RequestBody KasiyerEkleIstegi istek) {
+    @PreAuthorize("hasRole('ADMIN')")    public String kasiyerEkle(@PathVariable Long marketId, @RequestBody KasiyerEkleIstegi istek) {
 
         Kullanici aktif = getAktifKullanici();
 
@@ -97,8 +95,7 @@ public class KullaniciController {
     }
 
     @DeleteMapping("/sil/{id}")
-    @PreAuthorize("hasRole('ADMIN')")  // ✅ Manuel kontrol yerine Spring halleder
-    public String personelSil(@PathVariable Long id) {
+    @PreAuthorize("hasRole('ADMIN')")    public String personelSil(@PathVariable Long id) {
 
         Kullanici aktif = getAktifKullanici();
 

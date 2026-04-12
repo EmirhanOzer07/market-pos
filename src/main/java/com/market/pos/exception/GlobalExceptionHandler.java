@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-// ✅ Bu sınıf tüm controller'lardaki hataları merkezi olarak yakalar
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -51,7 +50,7 @@ public class GlobalExceptionHandler {
     // Beklenmeyen tüm hatalar → 500 (ama detay göstermiyoruz!)
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> genelHata(Exception e) {
-        // ✅ GÜVENLİK: Gerçek hatayı kullanıcıya göstermiyoruz — sadece logla
+        // Güvenlik: stack trace kullanıcıya iletilmez, yalnızca sunucu tarafında loglanır
         log.error("Beklenmeyen hata: {}", e.getMessage(), e);
         return hataYaniti("Sunucu hatası oluştu.", HttpStatus.INTERNAL_SERVER_ERROR);
     }

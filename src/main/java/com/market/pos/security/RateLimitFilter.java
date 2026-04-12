@@ -22,9 +22,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final long TEMIZLEME_SURESI = 3_600_000L;
 
-    // ✅ YENİ — Bucket4j 8.x uyumlu modern API
+    
     private Bucket kovaOlustur() {
-        // ✅ Bucket4j 8.x uyumlu modern API
+        // Bucket4j 8.x API
         Bandwidth limit = Bandwidth.builder()
                 .capacity(10)
                 .refillGreedy(10, Duration.ofMinutes(1))
@@ -60,7 +60,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         eskiKovalariTemizle();
 
-        // ✅ DÜZELTİLDİ: X-Forwarded-For kaldırıldı, sadece gerçek bağlantı IP'si kullanılıyor
+        // X-Forwarded-For kullanılmıyor — header sahteciliğiyle rate limit atlanmasını önler
         // Saldırgan artık header sahteciliğiyle rate limit'i atlayamaz
         String ip = request.getRemoteAddr();
 

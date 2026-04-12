@@ -51,7 +51,7 @@ public class UrunController {
         }
     }
 
-    // ✅ GÖREV 4.1: Ürün listesini 30 saniye cache'le
+    // Ürün listesi 30 saniye cache'de tutulur (application.properties: caffeine spec)
     @GetMapping("/liste/{marketId}")
     @Cacheable(value = "urunListesi", key = "#marketId")
     public List<Urun> urunleriGetir(@PathVariable Long marketId) {
@@ -144,7 +144,7 @@ public class UrunController {
             while ((satir = br.readLine()) != null) {
                 satirNo++;
 
-                // ✅ DÜZELTİLDİ: Sınır kontrolü iç try-catch'in DIŞINDA
+                // Satır sınır kontrolü try-catch bloğu dışında — hata yutulmasını önler
                 // Artık exception yutulmuyor, döngü gerçekten duruyor
                 if (satirNo > MAX_SATIR + 1) {
                     throw new IllegalArgumentException(
@@ -256,7 +256,7 @@ public class UrunController {
         response.put("hatalar", hatalar);
         response.put("toplamIslem", eklenenCount + guncellenenCount);
         response.put("cakismalar", cakismalar);
-        yedekService.yedekAl("toplu_yukleme"); // ✅
+        yedekService.yedekAl("toplu_yukleme");
         return response;
     }
 
@@ -300,7 +300,7 @@ public class UrunController {
         return "Güncellendi";
     }
 
-    // ✅ CacheManager ile programatik cache temizleme (self-invocation sorununu önler)
+    // Programatik cache temizleme: self-invocation sorunundan kaçınmak için @CacheEvict yerine kullanılır
     private void urunCacheTemizle(Long marketId) {
         var cache = cacheManager.getCache("urunListesi");
         if (cache != null) cache.evict(marketId);

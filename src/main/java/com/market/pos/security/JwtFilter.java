@@ -23,7 +23,7 @@ import java.util.List;
 public class JwtFilter extends OncePerRequestFilter {
 
     @Autowired private JwtUtil jwtUtil;
-    @Autowired private TokenKaraListesi karaListesi; // ✅ YENİ
+    @Autowired private TokenKaraListesi karaListesi;
 
     // JwtFilter.java içinde — finally bloğuna taşı ki hata olsa da temizlensin
     @Override
@@ -62,7 +62,7 @@ public class JwtFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
 
         } finally {
-            MarketFilterAspect.filtreTemizle(); // ✅ Her request bitişinde ThreadLocal temizlenir
+            MarketFilterAspect.filtreTemizle(); // ThreadLocal temizleme — bellek sızıntısı olmaz
         }
     }
 }

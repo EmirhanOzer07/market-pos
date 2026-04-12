@@ -11,7 +11,7 @@ public class TokenKaraListesi {
 
     private final Map<String, Long> gecersizTokenlar = new ConcurrentHashMap<>();
 
-    // ✅ DÜZELTİLDİ: jwt.expiration ile her zaman senkronize
+    
     // Artık jwt süresi değişirse burası da otomatik güncellenir
     @Value("${jwt.expiration}")
     private long tokenOmru;

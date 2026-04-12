@@ -32,12 +32,12 @@ public class AuditLogger {
                 user, action, reason);
     }
 
-    // ✅ Başarısız davetiye/yönetici denemeleri için
+    
     public void logFailedAdminAttempt(String ip, String reason) {
         log.warn("[AUDIT] ADMIN_ATTEMPT_FAILED | IP: {} | Reason: {}", ip, reason);
     }
 
-    // ✅ YENİ: Başarılı admin işlemleri için doğru metot
+    
     public void logSuccessfulAdminAction(String ip, String action) {
         log.info("[AUDIT] ADMIN_ACTION_SUCCESS | IP: {} | Action: {}", ip, action);
     }

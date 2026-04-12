@@ -16,7 +16,7 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    // ✅ Artık kodun içinde değil, application.properties'den okunuyor
+    
     @Value("${jwt.secret}")
     private String gizliMetin;
 
@@ -25,7 +25,7 @@ public class JwtUtil {
 
     private Key secretKey;
 
-    // ✅ Spring bean'i oluşturduktan SONRA key'i hazırla
+    // @PostConstruct: Spring bean başlatıldıktan sonra JWT imzalama anahtarını hazırla
     @PostConstruct
     public void init() {
         this.secretKey = Keys.hmacShaKeyFor(gizliMetin.getBytes(StandardCharsets.UTF_8));

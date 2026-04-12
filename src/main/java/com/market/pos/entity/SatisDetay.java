@@ -5,6 +5,12 @@ import lombok.Getter;
 import lombok.Setter;
 import java.math.BigDecimal;
 
+/**
+ * Bir satış işleminin kalem detayını temsil eder.
+ *
+ * <p>{@code satilanFiyat} alanı, satış anındaki fiyatı sabitler.
+ * Ürün fiyatı sonradan değişse bile geçmiş satış kayıtları etkilenmez.
+ */
 @Getter
 @Setter
 @Entity
@@ -15,19 +21,21 @@ public class SatisDetay {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 🚀 PROFESYONEL İLİŞKİ: Bir satışın birçok detayı olabilir.
+    /** Bu detayın ait olduğu ana satış kaydı. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "satis_id", nullable = false)
     private Satis satis;
 
-    // 🚀 PROFESYONEL İLİŞKİ: Bir ürün birçok farklı satış detayında yer alabilir.
+    /** Satılan ürün. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "urun_id", nullable = false)
     private Urun urun;
 
+    /** Satılan adet (kesirli değer desteklenir, örn. 0.5 kg). */
     @Column(nullable = false)
     private Double adet = 1.0;
 
+    /** Satış anındaki birim fiyat. Fiyat değişikliklerinden etkilenmez. */
     @Column(name = "satilan_fiyat", nullable = false)
-    private BigDecimal satilanFiyat; // Java standartlarına göre camelCase yaptık
+    private BigDecimal satilanFiyat;
 }

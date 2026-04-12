@@ -8,15 +8,21 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * {@link SatisDetay} entity'si için veri erişim katmanı.
+ */
 @Repository
 public interface SatisDetayRepository extends JpaRepository<SatisDetay, Long> {
 
-    // ✅ Belirli bir satışa ait tüm detayları sil
+    /**
+     * Bir satışa ait tüm kalem detaylarını siler.
+     * Kasiyer silinirken ilgili satış kayıtları temizlenirken çağrılır.
+     */
     @Modifying
     @Transactional
     @Query("DELETE FROM SatisDetay sd WHERE sd.satis.id = :satisId")
     void deleteBySatisId(@Param("satisId") Long satisId);
 
-    // Ürüne ait satış kaydı var mı? (silme öncesi kontrol)
+    /** Bir ürüne bağlı satış kaydı olup olmadığını kontrol eder (silme öncesi). */
     boolean existsByUrunId(Long urunId);
 }
