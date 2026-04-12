@@ -4,6 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Güvenlik olaylarını (giriş denemeleri, kullanıcı oluşturma/silme, satışlar) loglayan bileşen.
+ *
+ * <p>Tüm kayıtlar {@code [AUDIT]} önekiyle SLF4J üzerinden yazılır; bu sayede
+ * merkezi log toplama araçlarıyla kolayca filtrelenebilir.</p>
+ */
 @Component
 public class AuditLogger {
 

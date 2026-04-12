@@ -14,6 +14,12 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * IP başına istek hızını sınırlayan filtre (Bucket4j tabanlı token bucket algoritması).
+ *
+ * <p>Her IP adresi için ayrı bir kova tutulur; kota aşılınca {@code 429 Too Many Requests}
+ * döner. Sadece {@code /api/auth/} yollarına uygulanır.</p>
+ */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 

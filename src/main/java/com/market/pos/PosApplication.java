@@ -21,6 +21,13 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Uygulamanın giriş noktası; Spring Boot ve JavaFX'i aynı süreçte başlatır.
+ *
+ * <p>Spring context bir arka plan thread'inde başlar; hazır olunca JavaFX UI
+ * {@link GirisEkrani} ile gösterilir. Sistem tepsisi, güncelleme kontrolü ve
+ * patron şifresi yükleme de bu sınıfta yönetilir.</p>
+ */
 @SpringBootApplication
 @org.springframework.scheduling.annotation.EnableScheduling
 public class PosApplication extends Application {
@@ -415,7 +422,7 @@ public class PosApplication extends Application {
         }
     }
 
-    // ✅ SHA-256 hash hesapla — patron şifresi düz metin saklanmaz
+    /** SHA-256 ile hash hesaplar; patron şifresi bellekte düz metin olarak saklanmaz. */
     private static String hashle(String metin) {
         try {
             java.security.MessageDigest md =

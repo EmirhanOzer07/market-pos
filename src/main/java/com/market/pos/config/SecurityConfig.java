@@ -16,6 +16,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Spring Security yapılandırması.
+ *
+ * <p>Stateless JWT tabanlı kimlik doğrulama, CORS/CSRF ayarları ve SuperAdmin
+ * IP kısıtlaması bu sınıfta tanımlanır.</p>
+ */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {

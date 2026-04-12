@@ -18,6 +18,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Personel yönetimini (listeleme, ekleme, silme, şifre değiştirme) yöneten REST kontrolcüsü.
+ *
+ * <p>Kasiyer ekleme ve silme yalnızca ADMIN rolüne açıktır;
+ * şifre değiştirme tüm kimliği doğrulanmış kullanıcılar tarafından yapılabilir.</p>
+ */
 @RestController
 @RequestMapping("/api/kullanicilar")
 public class KullaniciController {

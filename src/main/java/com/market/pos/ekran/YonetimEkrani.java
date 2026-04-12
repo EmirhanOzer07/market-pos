@@ -18,6 +18,12 @@ import java.io.File;
 import java.nio.file.Files;
 import java.util.*;
 
+/**
+ * Yönetim paneli JavaFX ekranı (ADMIN rolü).
+ *
+ * <p>Ürün ekleme/güncelleme/silme, CSV toplu yükleme, personel yönetimi,
+ * satış raporları, yedek alma/geri yükleme ve şifre değiştirme sekmeleri içerir.</p>
+ */
 public class YonetimEkrani {
 
     private final Stage stage;
@@ -203,7 +209,6 @@ public class YonetimEkrani {
             }
         });
 
-        // ✅ GÖREV 5.3: Sütun sıralama aktif
         barkodKol.setSortable(true);
         isimKol.setSortable(true);
         fiyatKol.setSortable(true);
@@ -217,7 +222,6 @@ public class YonetimEkrani {
         tablo.getColumns().addAll(
                 siraKol, barkodKol, isimKol, fiyatKol, duzenleKol, silKol);
 
-        // ✅ GÖREV 5.3: Çift tıklama ile düzenleme dialogu
         tablo.setRowFactory(tv -> {
             TableRow<Map<String, Object>> satir = new TableRow<>();
             satir.setOnMouseClicked(e -> {
@@ -228,7 +232,6 @@ public class YonetimEkrani {
             return satir;
         });
 
-        // ✅ GÖREV 5.3: Satır sayısı dinamik güncelle
         urunVerisi.addListener((javafx.collections.ListChangeListener<Map<String, Object>>) c ->
                 urunSayisiLabel.setText(urunVerisi.size() + " ürün gösteriliyor"));
 

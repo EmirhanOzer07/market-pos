@@ -19,13 +19,18 @@ import java.util.Collections;
 import java.util.List;
 
 
+/**
+ * Her HTTP isteğinde JWT doğrulaması yapan filtre.
+ *
+ * <p>{@code Authorization: Bearer <token>} başlığını okuyarak imzayı doğrular,
+ * token kara listesini kontrol eder ve kimlik bilgisini {@link SecurityContextHolder}'a yazar.</p>
+ */
 @Component
 public class JwtFilter extends OncePerRequestFilter {
 
     @Autowired private JwtUtil jwtUtil;
     @Autowired private TokenKaraListesi karaListesi;
 
-    // JwtFilter.java içinde — finally bloğuna taşı ki hata olsa da temizlensin
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

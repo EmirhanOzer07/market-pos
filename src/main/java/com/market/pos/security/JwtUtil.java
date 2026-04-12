@@ -13,6 +13,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * JWT token üretimi ve doğrulaması için yardımcı sınıf.
+ *
+ * <p>Token içine kullanıcı adı, rol ve market ID eklenir; imzalama HMAC-SHA256 ile yapılır.
+ * Gizli anahtar {@code application.properties} dosyasındaki {@code jwt.secret} değerinden okunur.</p>
+ */
 @Component
 public class JwtUtil {
 

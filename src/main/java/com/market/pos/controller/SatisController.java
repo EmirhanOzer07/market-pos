@@ -13,6 +13,12 @@ import com.market.pos.service.YedekService;
 import java.math.BigDecimal;
 import java.util.*;
 
+/**
+ * Satış işlemlerini ve raporlarını yöneten REST kontrolcüsü.
+ *
+ * <p>Sepet doğrulaması, lisans kontrolü ve ödeme tipi denetimi bu katmanda yapılır.
+ * Tüm satış detayları atomik olarak kaydedilir.</p>
+ */
 @RestController
 @RequestMapping("/api/satis")
 public class SatisController {

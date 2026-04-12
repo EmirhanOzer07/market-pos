@@ -28,6 +28,13 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Ürün yönetimini (listeleme, arama, ekleme, güncelleme, silme, toplu CSV yükleme)
+ * yöneten REST kontrolcüsü.
+ *
+ * <p>Ürün listesi Caffeine cache ile 30 saniye tutulur. Tüm işlemler markete özgü
+ * yetki kontrolünden geçer.</p>
+ */
 @RestController
 @RequestMapping("/api/urunler")
 public class UrunController {

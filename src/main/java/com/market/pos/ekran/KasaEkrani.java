@@ -19,6 +19,12 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.util.*;
 
+/**
+ * Kasa işlemleri JavaFX ekranı.
+ *
+ * <p>Barkod okuma, sepet yönetimi, nakit/kart ödeme tamamlama ve
+ * günlük satış özetini gösterme işlevlerini içerir.</p>
+ */
 public class KasaEkrani {
 
     private static final Logger log = LoggerFactory.getLogger(KasaEkrani.class);

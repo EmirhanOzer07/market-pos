@@ -29,6 +29,12 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 
+/**
+ * Giriş ekranı JavaFX görünümü.
+ *
+ * <p>Kullanıcı adı ve şifre ile giriş yapar, lisans bitiş tarihi yaklaşınca
+ * uyarı gösterir. Ctrl+Shift+P ile gizli patron paneline erişilebilir.</p>
+ */
 public class GirisEkrani {
 
     private static final Logger log = LoggerFactory.getLogger(GirisEkrani.class);
@@ -237,7 +243,7 @@ public class GirisEkrani {
 
         Scene scene = new Scene(anaLayout, 500, 420);
 
-        // ✅ Gizli patron paneli kısayolu — Ctrl+Shift+P
+        // Ctrl+Shift+P ile gizli patron paneline erişim
         scene.setOnKeyPressed(e -> {
             if (e.isControlDown() && e.isShiftDown() &&
                     e.getCode() == javafx.scene.input.KeyCode.P) {

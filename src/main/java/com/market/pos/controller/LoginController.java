@@ -22,6 +22,12 @@ import java.util.Map;
 import java.time.LocalDate;
 
 
+/**
+ * Kayıt, giriş ve çıkış işlemlerini yöneten REST kontrolcüsü.
+ *
+ * <p>Kayıt davetiye kodu doğrulaması gerektirir; giriş başarılı olunca JWT token
+ * döner. Çıkışta token kara listeye alınır.</p>
+ */
 @RestController
 @RequestMapping("/api/auth")
 public class LoginController {

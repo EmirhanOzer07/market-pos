@@ -9,6 +9,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
 
+/**
+ * Spring Boot backend ile HTTP iletişimi kuran istemci yardımcı sınıfı.
+ *
+ * <p>JWT token'ı statik olarak tutar; tüm isteklere {@code Authorization: Bearer} başlığı ekler.
+ * HTTP 5xx yanıtları {@link IOException} fırlatır.</p>
+ */
 public class ApiClient {
 
     private static final String BASE_URL =
@@ -16,8 +22,7 @@ public class ApiClient {
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    // JWT token — giriş yapınca buraya kaydedilir
-    // volatile: JavaFX UI thread ve arka plan thread'ler arasında görünürlük garantisi
+    /** Giriş sonrası kaydedilen JWT token; UI ve arka plan thread'leri arasında görünürlük için volatile. */
     private static volatile String jwtToken = null;
     private static volatile Long marketId = null;
     private static volatile String kullaniciAdi = null;
