@@ -53,4 +53,11 @@ public class Kullanici {
     /** Kullanıcı rolü: {@code PATRON}, {@code ADMIN} veya {@code KASIYER}. */
     @Column(nullable = false)
     private String rol;
+
+    /**
+     * Hesap aktif mi? Silinen kasiyerler fiziksel olarak silinmez,
+     * {@code false} yapılarak satış geçmişi korunur.
+     */
+    @Column(columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private boolean aktif = true;
 }

@@ -112,6 +112,12 @@
             <version>5.2.5</version>
         </dependency>
 
+        <!-- Flyway — veritabanı migrasyon yönetimi -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

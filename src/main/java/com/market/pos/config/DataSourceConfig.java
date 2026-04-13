@@ -10,10 +10,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.sql.DataSource;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.zip.*;
 import java.sql.DriverManager;
 
@@ -140,14 +145,24 @@ public class DataSourceConfig {
             return;
         }
 
-        // 3. ZIP'ten script.sql'i çıkar → temp dosyaya yaz
+        // 3. Şifreleme kontrolü → gerekirse çöz → ZIP'ten script.sql'i çıkar
         Path tempSql = Paths.get(dbWin).getParent().resolve("restore_temp.sql");
         try {
-            try (ZipFile zip = new ZipFile(backupZip.toFile())) {
-                ZipEntry sqlEntry = zip.entries().nextElement();
-                try (InputStream in  = zip.getInputStream(sqlEntry);
-                     OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempSql))) {
-                    in.transferTo(out);
+            byte[] ham = Files.readAllBytes(backupZip);
+            byte[] zipBytes;
+            if (ham.length > 8 &&
+                    "MPOS_ENC".equals(new String(ham, 0, 8, StandardCharsets.UTF_8))) {
+                log.info("[GERİ YÜKLEME] Şifreli yedek tespit edildi, çözülüyor...");
+                zipBytes = yedekSifresiniCoz(ham);
+            } else {
+                zipBytes = ham;
+            }
+            try (ZipInputStream zis = new ZipInputStream(
+                         new java.io.ByteArrayInputStream(zipBytes))) {
+                ZipEntry entry = zis.getNextEntry();
+                if (entry == null) throw new IOException("ZIP içinde giriş bulunamadı");
+                try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempSql))) {
+                    zis.transferTo(out);
                 }
             }
         } catch (Exception e) {
@@ -176,6 +191,24 @@ public class DataSourceConfig {
 
         // 4. Başarılı → .bak'ı temizle
         try { Files.deleteIfExists(mvDbBak); } catch (Exception ignored) {}
+    }
+
+    /**
+     * MPOS_ENC formatındaki şifreli yedek baytlarını AES-256/GCM ile çözer.
+     *
+     * <p>Beklenen format: {@code MPOS_ENC} (8 bayt) + IV (12 bayt) + şifreli veri.</p>
+     */
+    private byte[] yedekSifresiniCoz(byte[] sifreliBayt) throws Exception {
+        String hexAnahtar = anahtarService.anahtarAl();
+        byte[] anahtarBytes = HexFormat.of().parseHex(hexAnahtar);
+
+        byte[] iv          = Arrays.copyOfRange(sifreliBayt, 8, 20);
+        byte[] sifreliVeri = Arrays.copyOfRange(sifreliBayt, 20, sifreliBayt.length);
+
+        SecretKeySpec anahtarSpec = new SecretKeySpec(anahtarBytes, "AES");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, anahtarSpec, new GCMParameterSpec(128, iv));
+        return cipher.doFinal(sifreliVeri);
     }
 
     private void geriAlBak(Path mvDb, Path mvDbBak) {

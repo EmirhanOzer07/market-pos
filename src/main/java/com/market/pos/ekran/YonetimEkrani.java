@@ -29,6 +29,7 @@ public class YonetimEkrani {
     private final Stage stage;
     private Stage aktifBildirim;
     private List<Map<String, Object>> tumUrunler = new ArrayList<>();
+    private java.util.Comparator<Map<String, Object>> aktifSiralama = null;
 
     public YonetimEkrani(Stage stage) {
         this.stage = stage;
@@ -118,6 +119,38 @@ public class YonetimEkrani {
         Label urunSayisiLabel = new Label("0 ürün");
         urunSayisiLabel.setFont(Font.font("Arial", 13));
         urunSayisiLabel.setTextFill(Color.web("#7f8c8d"));
+
+        // ===== SIRALAMA =====
+        ComboBox<String> siralamaBox = new ComboBox<>();
+        siralamaBox.getItems().addAll(
+                "Varsayılan", "İsim A→Z", "İsim Z→A",
+                "Barkod A→Z", "Barkod Z→A", "Fiyat ↑", "Fiyat ↓");
+        siralamaBox.setValue("Varsayılan");
+        siralamaBox.setPrefHeight(38);
+        siralamaBox.setStyle("-fx-background-radius: 6; -fx-font-size: 13px;");
+
+        siralamaBox.valueProperty().addListener((obs, eski, yeni) -> {
+            switch (yeni != null ? yeni : "Varsayılan") {
+                case "İsim A→Z"   -> aktifSiralama = java.util.Comparator.comparing(
+                        u -> u.get("isim").toString().toLowerCase());
+                case "İsim Z→A"   -> aktifSiralama = java.util.Comparator
+                        .<Map<String, Object>, String>comparing(u -> u.get("isim").toString().toLowerCase())
+                        .reversed();
+                case "Barkod A→Z" -> aktifSiralama = java.util.Comparator.comparing(
+                        u -> u.get("barkod").toString());
+                case "Barkod Z→A" -> aktifSiralama = java.util.Comparator
+                        .<Map<String, Object>, String>comparing(u -> u.get("barkod").toString())
+                        .reversed();
+                case "Fiyat ↑"    -> aktifSiralama = java.util.Comparator.comparingDouble(
+                        u -> ((Number) u.get("fiyat")).doubleValue());
+                case "Fiyat ↓"    -> aktifSiralama = java.util.Comparator
+                        .comparingDouble((Map<String, Object> u) -> ((Number) u.get("fiyat")).doubleValue())
+                        .reversed();
+                default           -> aktifSiralama = null;
+            }
+            if (aktifSiralama != null) tumUrunler.sort(aktifSiralama);
+            aramayaGoreFiltrele(aramaField.getText(), urunVerisi, tablo);
+        });
 
         // ===== KOLONLAR =====
         TableColumn<Map<String, Object>, Integer> siraKol =
@@ -289,7 +322,7 @@ public class YonetimEkrani {
                 "-fx-background-color: #f0f3f4; " +
                         "-fx-border-color: #dee2e6; -fx-border-width: 0 0 1 0;");
 
-        HBox aramaSatiri = new HBox(12, aramaField, urunSayisiLabel);
+        HBox aramaSatiri = new HBox(12, aramaField, siralamaBox, urunSayisiLabel);
         aramaSatiri.setAlignment(Pos.CENTER_LEFT);
         aramaSatiri.setPadding(new Insets(8, 15, 8, 15));
         aramaSatiri.setStyle(
@@ -339,6 +372,7 @@ public class YonetimEkrani {
                     tumUrunler.clear();
                     for (Object o : liste)
                         tumUrunler.add((Map<String, Object>) o);
+                    if (aktifSiralama != null) tumUrunler.sort(aktifSiralama);
                     veri.clear();
                     veri.addAll(tumUrunler);
                     tablo.refresh();

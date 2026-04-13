@@ -7,9 +7,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import javax.sql.DataSource;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.StandardCopyOption;
+import java.security.SecureRandom;
+import java.util.HexFormat;
 import java.util.zip.*;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -25,8 +32,14 @@ public class YedekService {
 
     private static final Logger log = LoggerFactory.getLogger(YedekService.class);
 
+    /** Şifreli yedek dosyalarını tanımlamak için kullanılan 8 baytlık sihirli başlık. */
+    private static final byte[] SIFRE_BASLIGI = "MPOS_ENC".getBytes(StandardCharsets.UTF_8);
+
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private VeriTabaniAnahtarService anahtarService;
 
     private static final String APPDATA_DIR =
             System.getProperty("user.home") + "/AppData/Local/MarketPOS";
@@ -42,7 +55,8 @@ public class YedekService {
     private final ReentrantLock yedekKilidi = new ReentrantLock();
 
     /**
-     * Uygulama başlarken: Bugün için günlük yedek yoksa al.
+     * Uygulama başlarken: Bugün için günlük yedek yoksa al, ardından
+     * veritabanı anahtarını yedek klasörüne kopyala (Google Drive güvencesi).
      * Veri kaybına karşı ilk savunma hattı.
      */
     @PostConstruct
@@ -59,7 +73,27 @@ public class YedekService {
             } else {
                 log.info("[YEDEK] Bugün için günlük yedek mevcut: {}", bugunYedekleri[0].getName());
             }
+            anahtarYedekle();
         }).start();
+    }
+
+    /**
+     * Veritabanı şifreleme anahtarını yedek klasörüne kopyalar.
+     *
+     * <p>Yedek klasörü Google Drive ile senkronize ediliyorsa anahtar da
+     * otomatik olarak buluta gider. Bilgisayar tamamen bozulsa bile
+     * şifreli yedekler bu anahtar ile geri açılabilir.</p>
+     */
+    private void anahtarYedekle() {
+        try {
+            Path kaynak = anahtarService.anahtarDosyasiYolu();
+            Path hedef  = Paths.get(YEDEK_KLASORU, "dbkey.bak");
+            Files.createDirectories(Paths.get(YEDEK_KLASORU));
+            Files.copy(kaynak, hedef, StandardCopyOption.REPLACE_EXISTING);
+            log.info("[GÜVENLİK] Veritabanı anahtarı yedeklendi: {}", hedef);
+        } catch (Exception e) {
+            log.warn("[GÜVENLİK] Anahtar yedeği alınamadı: {}", e.getMessage());
+        }
     }
 
     /**
@@ -161,7 +195,7 @@ public class YedekService {
 
     /**
      * H2'nin SCRIPT TO'su plain SQL üretir — ZIP değil.
-     * Bu metot SQL'i önce temp dosyaya yazar, sonra gerçek ZIP içine koyar.
+     * Bu metot SQL'i önce temp dosyaya yazar, sonra gerçek ZIP içine koyar ve şifreler.
      * ZIP entry adı: script.sql  → YedekController.sqlFormatMi() bunu kontrol eder.
      */
     private void sqlYedekAlVeZiple(Connection conn, Path zipHedef) throws Exception {
@@ -181,8 +215,36 @@ public class YedekService {
                 sqlIn.transferTo(zos);
                 zos.closeEntry();
             }
+            // 3. ZIP dosyasını AES-256/GCM ile şifrele
+            yedegSifrele(zipHedef);
         } finally {
             Files.deleteIfExists(tempSql);
+        }
+    }
+
+    /**
+     * Belirtilen dosyayı AES-256/GCM ile şifreler ve üzerine yazar.
+     *
+     * <p>Dosya formatı: {@code MPOS_ENC} (8 bayt) + IV (12 bayt) + şifreli veri.</p>
+     */
+    private void yedegSifrele(Path dosya) throws Exception {
+        String hexAnahtar = anahtarService.anahtarAl();
+        byte[] anahtarBytes = HexFormat.of().parseHex(hexAnahtar);
+
+        byte[] iv = new byte[12];
+        new SecureRandom().nextBytes(iv);
+
+        SecretKeySpec anahtarSpec = new SecretKeySpec(anahtarBytes, "AES");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, anahtarSpec, new GCMParameterSpec(128, iv));
+
+        byte[] ham = Files.readAllBytes(dosya);
+        byte[] sifreli = cipher.doFinal(ham);
+
+        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(dosya))) {
+            out.write(SIFRE_BASLIGI);
+            out.write(iv);
+            out.write(sifreli);
         }
     }
 }

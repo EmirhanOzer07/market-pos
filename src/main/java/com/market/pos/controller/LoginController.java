@@ -103,6 +103,11 @@ public class LoginController {
             throw new IllegalArgumentException("Hatalı kullanıcı adı veya şifre!");
         }
 
+        // Hesap devre dışı mı? (soft-delete)
+        if (!bulunanKullanici.isAktif()) {
+            throw new IllegalArgumentException("Bu hesap devre dışı bırakılmıştır!");
+        }
+
         // Lisans sona ermiş mi?
         java.time.LocalDate bitisTarihi = bulunanKullanici.getMarket().getLisansBitisTarihi();
         if (bitisTarihi != null && java.time.LocalDate.now().isAfter(bitisTarihi)) {

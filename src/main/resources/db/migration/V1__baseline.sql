@@ -1,0 +1,3 @@
+-- V1 Baseline: Şema Hibernate ddl-auto=update tarafından yönetilir.
+-- Bu dosya, mevcut kurulumlar için Flyway başlangıç noktasını işaretler.
+-- İçerik boş — V1, baseline-on-migrate ile otomatik geçilir, çalıştırılmaz.

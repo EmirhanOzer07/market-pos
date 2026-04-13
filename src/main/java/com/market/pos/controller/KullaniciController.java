@@ -4,16 +4,14 @@ import com.market.pos.dto.KasiyerEkleIstegi;
 import com.market.pos.dto.SifreDegistirIstek;
 import com.market.pos.entity.Kullanici;
 import com.market.pos.entity.Market;
-import com.market.pos.entity.Satis;
 import com.market.pos.repository.KullaniciRepository;
 import com.market.pos.repository.MarketRepository;
-import com.market.pos.repository.SatisDetayRepository;
-import com.market.pos.repository.SatisRepository;
 import com.market.pos.security.AuditLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,8 +29,6 @@ public class KullaniciController {
     @Autowired private KullaniciRepository kullaniciRepository;
     @Autowired private MarketRepository marketRepository;
     @Autowired private BCryptPasswordEncoder passwordEncoder;
-    @Autowired private SatisDetayRepository satisDetayRepository;
-    @Autowired private SatisRepository satisRepository;
     @Autowired private AuditLogger auditLogger;
 
     private Kullanici getAktifKullanici() {
@@ -46,7 +42,7 @@ public class KullaniciController {
         if (!aktif.getMarket().getId().equals(marketId)) {
             throw new SecurityException("Başka marketin personelini göremezsiniz!");
         }
-        return kullaniciRepository.findAllByMarketId(marketId);
+        return kullaniciRepository.findAllByMarketIdAndAktifTrue(marketId);
     }
 
     @PostMapping("/ekle/{marketId}")
@@ -101,7 +97,9 @@ public class KullaniciController {
     }
 
     @DeleteMapping("/sil/{id}")
-    @PreAuthorize("hasRole('ADMIN')")    public String personelSil(@PathVariable Long id) {
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public String personelSil(@PathVariable Long id) {
 
         Kullanici aktif = getAktifKullanici();
 
@@ -115,13 +113,9 @@ public class KullaniciController {
             throw new IllegalArgumentException("Kendinizi silemezsiniz!");
         }
 
-        List<Satis> satirlari = satisRepository.findAllByKullaniciId(id);
-        for (Satis satis : satirlari) {
-            satisDetayRepository.deleteBySatisId(satis.getId());
-        }
-
-        satisRepository.deleteByKullaniciId(id);
-        kullaniciRepository.deleteById(id);
+        // Soft delete — satış geçmişi ve denetim izi korunur
+        silinecek.setAktif(false);
+        kullaniciRepository.save(silinecek);
 
         auditLogger.logUserDeletion(id, aktif.getKullaniciAdi());
 

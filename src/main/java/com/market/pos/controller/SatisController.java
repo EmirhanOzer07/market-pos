@@ -98,7 +98,6 @@ public class SatisController {
         yeniSatis.setMarket(market);
         yeniSatis.setKullanici(kasiyer);
         yeniSatis.setOdemeTipi(istek.getOdemeTipi());
-        yeniSatis.setTarih(new java.util.Date());
         yeniSatis.setToplamTutar(toplamTutar);
 
         Satis kaydedilenSatis = satisRepository.save(yeniSatis);
@@ -145,10 +144,8 @@ public class SatisController {
             if (basLd.isAfter(bitLd)) {
                 throw new IllegalArgumentException("Başlangıç tarihi bitiş tarihinden sonra olamaz!");
             }
-            java.util.Date bas = java.util.Date.from(
-                    basLd.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
-            java.util.Date bit = java.util.Date.from(
-                    bitLd.atTime(23, 59, 59).atZone(java.time.ZoneId.systemDefault()).toInstant());
+            java.time.LocalDateTime bas = basLd.atStartOfDay();
+            java.time.LocalDateTime bit = bitLd.atTime(23, 59, 59);
 
             Map<String, Object> yanit = new HashMap<>();
             BigDecimal toplam = satisRepository.toplamCiroAralik(marketId, bas, bit);

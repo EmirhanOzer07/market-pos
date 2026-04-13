@@ -1,22 +1,27 @@
 package com.market.pos.security;
 
+import com.market.pos.entity.GecersizToken;
+import com.market.pos.repository.GecersizTokenRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Geçersiz kılınmış JWT token'larını bellekte tutan kara liste.
+ * Geçersiz kılınmış JWT token'larını veritabanında kalıcı olarak tutan kara liste.
  *
- * <p>Çıkış yapılan token'lar bu sınıfa eklenir ve her istekte {@link #gecersizMi(String)}
- * ile kontrol edilir. Süresi dolmuş token'lar {@code jwt.expiration} değerine göre
- * periyodik olarak otomatik temizlenir.</p>
+ * <p>Uygulama yeniden başlatılsa bile çıkış yapılmış token'lar geçerli sayılmaz.
+ * Süresi dolmuş kayıtlar saatlik periyodik temizleme ile otomatik silinir.</p>
  */
 @Component
 public class TokenKaraListesi {
 
-    private final Map<String, Long> gecersizTokenlar = new ConcurrentHashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(TokenKaraListesi.class);
+
+    @Autowired
+    private GecersizTokenRepository repository;
 
     @Value("${jwt.expiration}")
     private long tokenOmru;
@@ -27,8 +32,13 @@ public class TokenKaraListesi {
      * @param token geçersiz kılınacak JWT token
      */
     public void ekle(String token) {
+        if (!repository.existsByToken(token)) {
+            GecersizToken gecersiz = new GecersizToken();
+            gecersiz.setToken(token);
+            gecersiz.setEklenmeSuresi(System.currentTimeMillis());
+            repository.save(gecersiz);
+        }
         temizle();
-        gecersizTokenlar.put(token, System.currentTimeMillis());
     }
 
     /**
@@ -38,24 +48,23 @@ public class TokenKaraListesi {
      * @return kara listede ise {@code true}
      */
     public boolean gecersizMi(String token) {
-        return gecersizTokenlar.containsKey(token);
+        return repository.existsByToken(token);
     }
 
     private void temizle() {
-        long simdi = System.currentTimeMillis();
-        gecersizTokenlar.entrySet()
-                .removeIf(giris -> (simdi - giris.getValue()) > tokenOmru);
+        long esik = System.currentTimeMillis() - tokenOmru;
+        repository.deleteByEklenmeSuresiLessThan(esik);
     }
 
-    /** Saatlik periyodik temizleme — süresi dolmuş token'ların bellekte birikmesini önler. */
+    /** Saatlik periyodik temizleme — süresi dolmuş token'ların veritabanında birikmesini önler. */
     @Scheduled(fixedDelay = 3_600_000)
     public void periyodikTemizle() {
-        int onceki = gecersizTokenlar.size();
+        long onceki = repository.count();
         temizle();
-        int silinen = onceki - gecersizTokenlar.size();
+        long sonra = repository.count();
+        long silinen = onceki - sonra;
         if (silinen > 0) {
-            org.slf4j.LoggerFactory.getLogger(TokenKaraListesi.class)
-                    .info("[TOKEN] Periyodik temizleme: {} süresi dolmuş token silindi", silinen);
+            log.info("[TOKEN] Periyodik temizleme: {} süresi dolmuş token silindi", silinen);
         }
     }
 }

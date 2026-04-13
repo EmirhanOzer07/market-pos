@@ -28,4 +28,7 @@ public interface KullaniciRepository extends JpaRepository<Kullanici, Long> {
     Kullanici findByKullaniciAdiWithMarket(@Param("kullaniciAdi") String kullaniciAdi);
 
     List<Kullanici> findAllByMarketId(Long marketId);
+
+    /** Markete ait yalnızca aktif (silinmemiş) kullanıcıları getirir. */
+    List<Kullanici> findAllByMarketIdAndAktifTrue(Long marketId);
 }

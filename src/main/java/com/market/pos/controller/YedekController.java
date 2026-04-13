@@ -92,10 +92,25 @@ public class YedekController {
         }
     }
 
-    /** ZIP içinde veri.mv.db yoksa yeni SQL formatıdır. */
+    /**
+     * Dosyanın yeni SQL formatında olup olmadığını kontrol eder.
+     *
+     * <p>Şifreli yedekler ("MPOS_ENC" başlığıyla) doğrudan SQL formatı sayılır.
+     * Şifresiz ZIP'lerde eski binary format göstergesi olan "veri.mv.db" girişine bakılır.</p>
+     */
     private boolean sqlFormatMi(File dosya) {
-        try (ZipFile zip = new ZipFile(dosya)) {
-            return zip.stream().noneMatch(e -> e.getName().equals("veri.mv.db"));
+        try {
+            // Şifreli yedek mi? (MPOS_ENC başlığı) → yeni SQL formatı
+            byte[] bas = new byte[8];
+            try (java.io.InputStream is = new java.io.FileInputStream(dosya)) {
+                if (is.read(bas) == 8 && "MPOS_ENC".equals(new String(bas, StandardCharsets.UTF_8))) {
+                    return true;
+                }
+            }
+            // Şifresiz ZIP — veri.mv.db yoksa SQL formatı
+            try (ZipFile zip = new ZipFile(dosya)) {
+                return zip.stream().noneMatch(e -> e.getName().equals("veri.mv.db"));
+            }
         } catch (Exception e) {
             return false;
         }
