@@ -13,6 +13,13 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 
+/**
+ * Çok kiracılı mimari için Hibernate {@code marketFilter} filtresi uygulayan AOP aspect.
+ *
+ * <p>Her repository çağrısından önce aktif kullanıcının market ID'sini Hibernate oturumuna
+ * yerleştirir; böylece tüm sorgular otomatik olarak ilgili markete ait verilerle sınırlanır.
+ * Tekrarlı çalışmayı önlemek için {@link ThreadLocal} kullanılır.</p>
+ */
 @Aspect
 @Component
 public class MarketFilterAspect {
@@ -23,8 +30,9 @@ public class MarketFilterAspect {
     @Autowired
     private KullaniciRepository kullaniciRepository;
 
-    
-    // Her repository çağrısında 1 ekstra sorgu yapılıyordu — bu ThreadLocal ile engellendi
+    /**
+     * Aynı request içinde filtrenin birden fazla çalışmasını önleyen ThreadLocal bayrağı.
+     */
     private static final ThreadLocal<Boolean> filtreAktif = ThreadLocal.withInitial(() -> false);
 
     @Before("execution(* com.market.pos.repository.*.*(..)) && " +
@@ -33,7 +41,6 @@ public class MarketFilterAspect {
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public void marketFiltresiniAktifEt() {
 
-        // Aynı request içinde tekrar çalışmayı önle
         if (filtreAktif.get()) {
             return;
         }
@@ -42,7 +49,6 @@ public class MarketFilterAspect {
 
         if (auth != null && auth.isAuthenticated() && !auth.getName().equals("anonymousUser")) {
 
-            // JOIN FETCH ile Market aynı sorguda yüklenir — open-in-view=false altında lazy proxy hatası olmaz
             Kullanici aktifKullanici = kullaniciRepository.findByKullaniciAdiWithMarket(auth.getName());
 
             if (aktifKullanici != null && aktifKullanici.getMarket() != null) {
@@ -61,8 +67,9 @@ public class MarketFilterAspect {
         }
     }
 
-    // Request bitince ThreadLocal temizlenir — bellek sızıntısı olmaz
-    // Bu metodun çağrılması için SecurityConfig'e bir filter eklemek gerekiyor (aşağıya bak)
+    /**
+     * Request sonunda ThreadLocal'ı temizler; bellek sızıntısını önler.
+     */
     public static void filtreTemizle() {
         filtreAktif.remove();
     }

@@ -13,6 +13,12 @@ import javafx.stage.Stage;
 
 import java.util.Map;
 
+/**
+ * Yeni market kaydı için JavaFX kayıt ekranı.
+ *
+ * <p>Davetiye kodu doğrulamasını içeren kayıt formunu gösterir;
+ * başarılı kayıt sonrası giriş ekranına yönlendirir.</p>
+ */
 public class KayitEkrani {
 
     private final Stage stage;
@@ -24,7 +30,6 @@ public class KayitEkrani {
 
     public Scene olustur() {
 
-        // ===== BAŞLIK =====
         Label baslik = new Label("🏪 YENİ MARKET KAYDI");
         baslik.setFont(Font.font("Arial", FontWeight.BOLD, 20));
         baslik.setTextFill(Color.web("#2c3e50"));
@@ -37,13 +42,11 @@ public class KayitEkrani {
         baslikKutu.setAlignment(Pos.CENTER);
         baslikKutu.setPadding(new Insets(0, 0, 15, 0));
 
-        // ===== ALANLAR =====
         TextField kullaniciAdiField = alanOlustur("Kullanıcı Adı", "Yönetici kullanıcı adı...");
         PasswordField sifreField = sifreAlaniOlustur("Şifre (min 8 karakter)", "Güçlü bir şifre seçin...");
         TextField marketAdiField = alanOlustur("Market Adı", "Marketinizin adı...");
         TextField davetiyeField = alanOlustur("Davetiye Kodu", "POS-XXXXXXXX formatında...");
 
-        // ===== KAYIT OL BUTONU =====
         Button kayitBtn = new Button("HESAP OLUŞTUR");
         kayitBtn.setPrefWidth(Double.MAX_VALUE);
         kayitBtn.setPrefHeight(45);
@@ -66,7 +69,6 @@ public class KayitEkrani {
                 davetiyeField.getText().trim(),
                 kayitBtn));
 
-        // ===== GERİ BUTONU =====
         Button geriBtn = new Button("← Giriş Ekranına Dön");
         geriBtn.setPrefWidth(Double.MAX_VALUE);
         geriBtn.setPrefHeight(38);
@@ -83,13 +85,11 @@ public class KayitEkrani {
             stage.centerOnScreen();
         });
 
-        // ===== HATA MESAJI =====
         hataMesaji = new Label("");
         hataMesaji.setFont(Font.font("Arial", 13));
         hataMesaji.setWrapText(true);
         hataMesaji.setMaxWidth(Double.MAX_VALUE);
 
-        // ===== FORM =====
         VBox form = new VBox(10,
                 baslikKutu,
                 etiketOlustur("Kullanıcı Adı"), kullaniciAdiField,
@@ -144,7 +144,6 @@ public class KayitEkrani {
 
                     if (mesaj.contains("Başarılı") || "Başarılı".equals(mesaj)) {
                         bildir("✓ Kayıt başarılı! Giriş yapabilirsiniz.", "#27ae60");
-                        // 2 sn sonra giriş ekranına dön
                         new Thread(() -> {
                             try { Thread.sleep(2000); } catch (Exception ignored) {}
                             Platform.runLater(() -> {

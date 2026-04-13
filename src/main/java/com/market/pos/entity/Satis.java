@@ -6,6 +6,12 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.util.Date;
 
+/**
+ * Tamamlanmış bir satış işlemini temsil eden JPA varlığı.
+ *
+ * <p>Her satış; markete, kasiyere, ödeme tipine ve toplam tutara sahiptir.
+ * Satış kalemleri {@link SatisDetay} üzerinden ilişkilendirilir.</p>
+ */
 @Getter
 @Setter
 @Entity
@@ -24,6 +30,7 @@ public class Satis {
     @JoinColumn(name = "kullanici_id", nullable = false)
     private Kullanici kullanici;
 
+    /** Ödeme yöntemi: {@code NAKIT} veya {@code KART}. */
     private String odemeTipi;
 
     @Temporal(TemporalType.TIMESTAMP)

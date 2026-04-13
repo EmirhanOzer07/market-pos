@@ -1,168 +1,135 @@
-# 🏪 MarketPOS
+# Market POS Sistemi
 
-A secure, offline-first Point of Sale (POS) system for small and medium-sized retail stores. Built with Spring Boot and JavaFX as a standalone desktop application — no internet connection required for daily operations.
+Küçük ve orta ölçekli marketler için geliştirilmiş, güvenli ve internet bağlantısı gerektirmeyen masaüstü satış noktası (POS) uygulaması.
+
+> A secure, offline-first Point of Sale system for retail stores. Built with Spring Boot + JavaFX as a standalone desktop application — no internet required for daily operations.
 
 ![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.4-brightgreen?logo=springboot)
-![JavaFX](https://img.shields.io/badge/JavaFX-21-blue)
+![JavaFX](https://img.shields.io/badge/JavaFX-21-blue?logo=java)
 ![H2](https://img.shields.io/badge/H2-AES--256%20Encrypted-red)
+![JWT](https://img.shields.io/badge/Auth-JWT-yellow)
 ![License](https://img.shields.io/badge/License-Proprietary-lightgrey)
 
 ---
 
-## ✨ Features
+## Özellikler
 
-- **Sales & Checkout** — Barcode scanning, cart management, cash/card payments
-- **Product Management** — Add, edit, delete products; bulk import via CSV/Excel
-- **Employee Management** — ADMIN and KASIYER roles with separate permissions
-- **Daily Reports** — Sales summaries, revenue breakdown by payment type
-- **Automated Backups** — Daily SQL backups + Excel product list exports (Google Drive ready)
-- **Backup & Restore** — One-click restore from any of the last 20 backups
-- **License Management** — Per-market expiry dates with in-app renewal reminders
-- **Auto-Update** — Detects and applies new releases automatically from GitHub
-- **Dark / Light Theme** — User-selectable UI theme
-
----
-
-## 🔒 Security
-
-| Layer | Implementation |
-|-------|---------------|
-| Database encryption | H2 `CIPHER=AES` (AES-256) with per-installation key |
-| Password hashing | BCrypt (cost factor 10) |
-| API authentication | JWT (HMAC-SHA256), stateless, token blacklist on logout |
-| Brute-force protection | Bucket4j rate limiting — 10 requests/min per IP |
-| Multi-tenant isolation | Spring AOP aspect enforces market-scoped data access |
-| Credential storage | Secrets in `AppData` only — never in source code or `application.properties` |
-| Audit logging | All auth events, admin actions, and sales transactions are logged |
-| Path traversal | Normalized path resolution with `startsWith` boundary check |
+- **Satış & Kasa** — Barkod okuma, sepet yönetimi, nakit/kart ödeme
+- **Ürün Yönetimi** — Ürün ekleme, güncelleme, silme; CSV ile toplu yükleme
+- **Personel Yönetimi** — ADMIN ve KASIYER rolleri, şifre değiştirme
+- **Satış Raporları** — Günlük/dönemsel ciro, nakit-kart ayrımı
+- **Otomatik Yedekleme** — Günlük SQL yedekleri + Excel ürün listesi (Google Drive uyumlu)
+- **Yedek & Geri Yükleme** — Son 20 yedekten tek tıkla geri dönüş
+- **Lisans Yönetimi** — Market bazında bitiş tarihi, uygulama içi uyarı
+- **Otomatik Güncelleme** — GitHub üzerinden yeni sürüm tespiti ve kurulum
+- **Karanlık / Aydınlık Tema** — Kullanıcı tercihine göre değiştirilebilir
+- **Çok Kiracılı Mimari** — Tek sunucu, birden fazla bağımsız market
 
 ---
 
-## 🏗️ Architecture
+## Teknoloji Yığını
 
-```
-┌─────────────────────────────────────────────┐
-│               JavaFX UI Layer                │
-│  GirisEkrani │ KasaEkrani │ YonetimEkrani   │
-└────────────────────┬────────────────────────┘
-                     │ HTTP (localhost)
-┌────────────────────▼────────────────────────┐
-│          Spring Boot REST API               │
-│  LoginController │ SatisController          │
-│  UrunController  │ KullaniciController      │
-│  YedekController │ SuperAdminController     │
-└────────────────────┬────────────────────────┘
-                     │ JPA/Hibernate
-┌────────────────────▼────────────────────────┐
-│       H2 Embedded Database (AES-256)        │
-│  AppData\Local\MarketPOS\veri.mv.db         │
-└─────────────────────────────────────────────┘
-```
-
-**Role hierarchy:**
-
-```
-PATRON (developer)
-  └── ADMIN (market owner)
-        └── KASIYER (cashier)
-```
-
----
-
-## 🛠️ Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
+| Katman | Teknoloji |
+|---|---|
 | Backend | Spring Boot 3.3.4 |
-| Frontend | JavaFX 21 |
-| Database | H2 2.x (embedded, AES encrypted) |
-| ORM | Spring Data JPA / Hibernate |
-| Security | Spring Security 6, JWT, Bucket4j |
-| Excel export | Apache POI 5.2.5 |
-| Build | Maven 3 |
-| Packaging | jpackage (Windows EXE) |
-| Runtime | JDK 21 (bundled) |
+| UI | JavaFX 21 |
+| Veritabanı | H2 (AES-256 şifreli, gömülü) |
+| Kimlik Doğrulama | JWT (HMAC-SHA256) |
+| Şifre Hashleme | BCrypt |
+| Hız Sınırlama | Bucket4j (token bucket) |
+| Önbellekleme | Caffeine Cache |
+| Excel Dışa Aktarım | Apache POI 5.2.5 |
+| Paketleme | jpackage (gömülü JRE, `.exe`) |
 
 ---
 
-## 🚀 Getting Started
+## Güvenlik Özellikleri
 
-### Prerequisites
+| Katman | Uygulama |
+|---|---|
+| Veritabanı | AES-256 şifreleme (`CIPHER=AES`) |
+| Kimlik doğrulama | JWT — HMAC-SHA256, kara liste desteği |
+| Şifreler | BCrypt hashing |
+| Çok kiracılılık | Hibernate `@Filter` ile satır düzeyinde izolasyon |
+| Hız sınırlama | IP başına dakikada 10 istek |
+| Yetkilendirme | Spring Security + `@PreAuthorize` |
+| SuperAdmin | Yalnızca localhost erişimi |
+| Denetim | Tüm giriş denemeleri ve işlemler loglanır |
+| Dosya yükleme | MIME tipi + uzantı + boyut doğrulaması |
+| Path traversal | Yedek dosya erişiminde `normalize()` kontrolü |
 
-- JDK 21+
-- Maven 3.8+
+---
 
-### Build
+## Sistem Gereksinimleri
+
+**Geliştirici ortamı:**
+- Java 21 (JDK)
+- Maven 3.9+
+
+**Müşteri bilgisayarı:**
+- Windows 10/11 (64-bit)
+- Java kurulumu gerekmez — uygulama gömülü JRE ile gelir
+
+---
+
+## Kurulum (Geliştirici)
 
 ```bash
+git clone https://github.com/EmirhanOzer07/market-pos.git
+cd market-pos
 mvn package -DskipTests
-```
-
-The executable JAR is produced at `target/pos-0.0.1-SNAPSHOT.jar`.
-
-### Run (development)
-
-```bash
 java -jar target/pos-0.0.1-SNAPSHOT.jar
 ```
 
-On first launch the app creates `AppData\Local\MarketPOS\config.properties` with randomly generated secrets. A patron account is initialized with a default password stored as BCrypt in `patron.hash`.
+---
 
-### Packaged distribution
+## Müşteri Kurulumu
 
-Use the provided `dist/` folder (built separately with `jpackage`) which bundles a JRE and produces a native Windows installer.
+1. `MarketPOS/` klasörünü müşteri bilgisayarına kopyalayın
+2. `MarketPOS.exe`'yi çalıştırın
+3. Davetiye koduyla kayıt olun (Patron panelinden üretilir)
+
+Sonraki güncellemeler otomatik olarak indirilip kurulur.
 
 ---
 
-## 📁 Runtime Data (AppData)
-
-All sensitive runtime data is stored outside the project directory:
+## Proje Yapısı
 
 ```
-%LOCALAPPDATA%\MarketPOS\
-├── veri.mv.db          # AES-256 encrypted H2 database
-├── config.properties   # JWT_SECRET, DB_KULLANICI_SIFRESI (auto-generated)
-├── .dbkey              # AES file-encryption key (auto-generated)
-├── patron.hash         # BCrypt hash of the patron password
-├── yedek/
-│   ├── gunluk/         # Daily SQL backups (ZIP)
-│   ├── islem/          # Transaction-triggered backups (ZIP)
-│   └── excel/          # Daily Excel product exports
-└── guncelleme/         # Auto-update staging area
+src/main/java/com/market/pos/
+├── config/          # Spring Security, uygulama bean'leri, DataSource
+├── controller/      # REST API uç noktaları
+├── dto/             # İstek/yanıt veri transfer nesneleri
+├── ekran/           # JavaFX UI ekranları ve API istemcisi
+├── entity/          # JPA varlıkları
+├── exception/       # Global hata yönetimi
+├── repository/      # Spring Data JPA repository'leri
+├── security/        # JWT, rate limiting, audit, AOP filtresi
+└── service/         # Yedekleme ve Excel dışa aktarım servisleri
 ```
 
-> None of these files are tracked by git.
+---
+
+## Kullanıcı Rolleri
+
+| Rol | Yetkiler |
+|---|---|
+| `ADMIN` | Tüm işlemler: ürün, personel, raporlar, yedek |
+| `KASIYER` | Yalnızca satış ve kasa işlemleri |
+| Patron | SuperAdmin paneli: market lisansları, davetiye üretimi |
 
 ---
 
-## 🔑 Credential Overview
+## Yedekleme
 
-| Credential | Default | Where stored | Who knows it |
-|-----------|---------|-------------|-------------|
-| Patron password | `patron123` | `patron.hash` (BCrypt) | Developer only |
-| Admin password | Set at registration | H2 DB (BCrypt) | Market owner |
-| Cashier password | Set by admin | H2 DB (BCrypt) | Cashier |
-| JWT secret | Auto-generated | `config.properties` | Nobody (auto) |
-| DB user password | Auto-generated | `config.properties` | Nobody (auto) |
-| DB AES key | Auto-generated | `.dbkey` | Nobody (auto) |
-
-**Reset patron password:** delete `patron.hash` and restart — the app recreates it with the default.
+- **Günlük otomatik yedek** — her gece 02:00 (son 30 yedek saklanır)
+- **İşlem sonrası yedek** — her satış/ürün/silme işleminden sonra (son 20 yedek)
+- **Excel dışa aktarım** — her gece 23:59 (ürün listesi)
+- Yedekler `%LOCALAPPDATA%\MarketPOS\yedekler\` konumunda tutulur
 
 ---
 
-## 📦 Release & Update
+## Lisans
 
-Releases are published on [GitHub Releases](../../releases). The app checks for updates on every launch and applies them automatically (Windows only).
-
-To publish a new release:
-1. Update `MEVCUT_SURUM` in `GuncellemeService.java`
-2. Build: `mvn package -DskipTests`
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`
-4. Create a GitHub Release for the tag and attach the JAR
-
----
-
-## 📄 License
-
-Proprietary — All rights reserved. © 2026 Mustafa Emirhan Özer
+Tüm hakları saklıdır. Ticari kullanım için iletişime geçin.

@@ -18,6 +18,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
+/**
+ * Patron (süper yönetici) paneli JavaFX ekranı.
+ *
+ * <p>Şifre doğrulaması sonrası market lisanslarını uzatma, davetiye kodu üretme
+ * ve tüm marketleri listeleme işlevlerini sağlar. Ctrl+Shift+P kısayoluyla açılır.</p>
+ */
 public class PatronEkrani {
 
     private static final java.net.http.HttpClient HTTP_CLIENT =
@@ -30,10 +36,9 @@ public class PatronEkrani {
     private final Stage stage;
     private Stage aktifBildirim;
 
-    // Doğrulandıktan sonra hafızada tutulur — her işlemde tekrar sorulmaz
+    /** Doğrulanan patron şifresi; her istekte tekrar sorulmaz. */
     private String dogrulanmisSifre = null;
 
-    // UI referansları
     private VBox loginPanel;
     private VBox anaPanel;
     private ObservableList<Map<String, Object>> marketVerisi;
@@ -47,7 +52,6 @@ public class PatronEkrani {
 
     public Scene olustur() {
 
-        // ===== ÜST BAR =====
         Label baslik = new Label("🔐  PATRON PANELİ");
         baslik.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         baslik.setTextFill(Color.WHITE);
@@ -73,10 +77,7 @@ public class PatronEkrani {
         ustBar.setPadding(new Insets(10, 15, 10, 15));
         ustBar.setStyle("-fx-background-color: #1a252f;");
 
-        // ===== GİRİŞ PANELİ (şifre doğrulanana kadar görünür) =====
         loginPanel = olusturLoginPanel();
-
-        // ===== ANA PANEL (şifre doğrulandıktan sonra görünür) =====
         anaPanel = olusturAnaPanel();
         anaPanel.setVisible(false);
         anaPanel.setManaged(false);
@@ -90,9 +91,7 @@ public class PatronEkrani {
         return new Scene(root, 1100, 720);
     }
 
-    // ===== GİRİŞ PANELİ =====
     private VBox olusturLoginPanel() {
-        // Kilit ikonu
         Label kilit = new Label("🔐");
         kilit.setFont(Font.font(52));
 
@@ -181,10 +180,8 @@ public class PatronEkrani {
         return panel;
     }
 
-    // ===== ANA PANEL =====
     private VBox olusturAnaPanel() {
 
-        // ===== SOL PANEL — DAVETİYE =====
         Label davetiyeBaslik = new Label("🎟  Davetiye Kodu");
         davetiyeBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 15));
         davetiyeBaslik.setTextFill(Color.web("#2c3e50"));
@@ -214,7 +211,6 @@ public class PatronEkrani {
         davetiyeKutu.setStyle("-fx-background-color: white; -fx-background-radius: 10; " +
                 "-fx-border-color: #dee2e6; -fx-border-radius: 10;");
 
-        // ===== SOL PANEL — ÇIKIŞ =====
         Button cikisBtn = new Button("🔒  Kilitle");
         cikisBtn.setPrefWidth(220);
         cikisBtn.setPrefHeight(38);
@@ -239,9 +235,6 @@ public class PatronEkrani {
         solPanel.setStyle("-fx-background-color: #f4f6f7; " +
                 "-fx-border-color: #d5d8dc; -fx-border-width: 0 1 0 0;");
 
-        // ===== SAĞ PANEL — MARKET YÖNETİMİ =====
-
-        // Başlık satırı
         Label marketBaslik = new Label("🏪  Market Yönetimi");
         marketBaslik.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         marketBaslik.setTextFill(Color.web("#1a252f"));
@@ -263,7 +256,6 @@ public class PatronEkrani {
         sagBaslikSatiri.setAlignment(Pos.CENTER_LEFT);
         sagBaslikSatiri.setPadding(new Insets(16, 16, 10, 16));
 
-        // ===== MARKET TABLOSU =====
         marketVerisi = FXCollections.observableArrayList();
         marketTablosu = new TableView<>(marketVerisi);
         marketTablosu.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -272,7 +264,6 @@ public class PatronEkrani {
         marketTablosu.setPlaceholder(new Label("Market bulunamadı"));
         VBox.setVgrow(marketTablosu, Priority.ALWAYS);
 
-        // Alternating row colors
         marketTablosu.setRowFactory(tv -> new TableRow<Map<String, Object>>() {
             @Override
             protected void updateItem(Map<String, Object> item, boolean empty) {
@@ -287,7 +278,6 @@ public class PatronEkrani {
             }
         });
 
-        // # kolonu
         TableColumn<Map<String, Object>, Integer> siraKol = new TableColumn<>("#");
         siraKol.setCellFactory(col -> new TableCell<>() {
             @Override protected void updateItem(Integer item, boolean empty) {
@@ -299,14 +289,12 @@ public class PatronEkrani {
         siraKol.setPrefWidth(45);
         siraKol.setMaxWidth(45);
 
-        // Market Adı kolonu
         TableColumn<Map<String, Object>, String> adKol = new TableColumn<>("Market Adı");
         adKol.setCellValueFactory(d ->
                 new javafx.beans.property.SimpleStringProperty(
                         d.getValue().getOrDefault("marketAdi", "—").toString()));
         adKol.setPrefWidth(220);
 
-        // Lisans Bitiş kolonu
         TableColumn<Map<String, Object>, String> lisansKol = new TableColumn<>("Lisans Bitiş");
         lisansKol.setCellValueFactory(d -> {
             Object val = d.getValue().get("lisansBitisTarihi");
@@ -316,7 +304,6 @@ public class PatronEkrani {
         lisansKol.setPrefWidth(130);
         lisansKol.setStyle("-fx-alignment: CENTER;");
 
-        // Kalan Gün kolonu
         TableColumn<Map<String, Object>, String> kalanKol = new TableColumn<>("Kalan");
         kalanKol.setCellValueFactory(d -> {
             Object val = d.getValue().get("lisansBitisTarihi");
@@ -351,7 +338,6 @@ public class PatronEkrani {
             }
         });
 
-        // Durum kolonu
         TableColumn<Map<String, Object>, String> durumKol = new TableColumn<>("Durum");
         durumKol.setPrefWidth(110);
         durumKol.setStyle("-fx-alignment: CENTER;");
@@ -383,7 +369,6 @@ public class PatronEkrani {
             }
         });
 
-        // Lisans Uzat butonu kolonu
         TableColumn<Map<String, Object>, Void> uzatKol = new TableColumn<>("İşlem");
         uzatKol.setPrefWidth(140);
         uzatKol.setCellFactory(col -> new TableCell<>() {
@@ -418,7 +403,6 @@ public class PatronEkrani {
         VBox.setVgrow(marketTablosu, Priority.ALWAYS);
         VBox.setVgrow(sagPanel, Priority.ALWAYS);
 
-        // ===== ANA LAYOUT =====
         HBox govde = new HBox(0, solPanel, sagPanel);
         HBox.setHgrow(sagPanel, Priority.ALWAYS);
         VBox.setVgrow(govde, Priority.ALWAYS);
@@ -427,13 +411,11 @@ public class PatronEkrani {
         VBox.setVgrow(govde, Priority.ALWAYS);
         anaLayout.setStyle("-fx-background-color: #f4f6f7;");
 
-        // ===== OLAYLAR =====
         davetiyeUretBtn.setOnAction(e -> davetiyeUret());
 
         return anaLayout;
     }
 
-    // ===== MARKETLERİ YÜKLE =====
     private void marketleriYukle() {
         if (dogrulanmisSifre == null) return;
         marketSayisiLabel.setText("Yükleniyor...");
@@ -474,7 +456,6 @@ public class PatronEkrani {
         }).start();
     }
 
-    // ===== LİSANS UZAT =====
     private void lisansUzat(Map<String, Object> market) {
         if (dogrulanmisSifre == null) return;
 
@@ -507,7 +488,7 @@ public class PatronEkrani {
                     Platform.runLater(() -> {
                         if (yanit.statusCode() == 200) {
                             bildir("✅  " + marketAdi + " lisansı uzatıldı!", "#27ae60");
-                            marketleriYukle(); // Tabloyu yenile
+                            marketleriYukle();
                         } else {
                             bildir("❌  Lisans uzatılamadı: " + yanit.body(), "#e74c3c");
                         }
@@ -519,7 +500,6 @@ public class PatronEkrani {
         });
     }
 
-    // ===== DAVETİYE ÜRET =====
     private void davetiyeUret() {
         if (dogrulanmisSifre == null) return;
 
@@ -545,7 +525,6 @@ public class PatronEkrani {
         }).start();
     }
 
-    // ===== YARDIMCI: Tarih formatla =====
     private String tarihFormat(String iso) {
         try {
             return LocalDate.parse(iso)
@@ -555,7 +534,6 @@ public class PatronEkrani {
         }
     }
 
-    // ===== BİLDİRİM POPUP =====
     private void bildir(String mesaj, String renk) {
         Platform.runLater(() -> {
             if (aktifBildirim != null && aktifBildirim.isShowing()) {

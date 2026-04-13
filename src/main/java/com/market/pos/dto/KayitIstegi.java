@@ -5,6 +5,12 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * Yeni market kaydı için veri transfer nesnesi.
+ *
+ * <p>Kayıt işlemi davetiye kodu doğrulaması gerektirir;
+ * tüm alanlar {@code @Valid} ile sunucu tarafında doğrulanır.</p>
+ */
 @Getter
 @Setter
 public class KayitIstegi {

@@ -18,22 +18,21 @@ import java.util.concurrent.ConcurrentHashMap;
  * IP başına istek hızını sınırlayan filtre (Bucket4j tabanlı token bucket algoritması).
  *
  * <p>Her IP adresi için ayrı bir kova tutulur; kota aşılınca {@code 429 Too Many Requests}
- * döner. Sadece {@code /api/auth/} yollarına uygulanır.</p>
+ * döner. Sadece giriş, kayıt ve davetiye üretme uç noktalarına uygulanır.</p>
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
+    private static final int DAKIKA_BASI_ISTEK = 10;
+    private static final long KOVA_TEMIZLEME_SURESI_MS = 3_600_000L;
+
     private final Map<String, Bucket> kovalar = new ConcurrentHashMap<>();
     private final Map<String, Long> sonErisim = new ConcurrentHashMap<>();
 
-    private static final long TEMIZLEME_SURESI = 3_600_000L;
-
-    
     private Bucket kovaOlustur() {
-        // Bucket4j 8.x API
         Bandwidth limit = Bandwidth.builder()
-                .capacity(10)
-                .refillGreedy(10, Duration.ofMinutes(1))
+                .capacity(DAKIKA_BASI_ISTEK)
+                .refillGreedy(DAKIKA_BASI_ISTEK, Duration.ofMinutes(1))
                 .build();
         return Bucket.builder().addLimit(limit).build();
     }
@@ -41,7 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private void eskiKovalariTemizle() {
         long simdi = System.currentTimeMillis();
         sonErisim.entrySet().removeIf(e -> {
-            if (simdi - e.getValue() > TEMIZLEME_SURESI) {
+            if (simdi - e.getValue() > KOVA_TEMIZLEME_SURESI_MS) {
                 kovalar.remove(e.getKey());
                 return true;
             }
@@ -67,7 +66,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         eskiKovalariTemizle();
 
         // X-Forwarded-For kullanılmıyor — header sahteciliğiyle rate limit atlanmasını önler
-        // Saldırgan artık header sahteciliğiyle rate limit'i atlayamaz
         String ip = request.getRemoteAddr();
 
         sonErisim.put(ip, System.currentTimeMillis());

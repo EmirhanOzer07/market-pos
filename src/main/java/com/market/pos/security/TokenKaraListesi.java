@@ -6,21 +6,37 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Geçersiz kılınmış JWT token'larını bellekte tutan kara liste.
+ *
+ * <p>Çıkış yapılan token'lar bu sınıfa eklenir ve her istekte {@link #gecersizMi(String)}
+ * ile kontrol edilir. Süresi dolmuş token'lar {@code jwt.expiration} değerine göre
+ * periyodik olarak otomatik temizlenir.</p>
+ */
 @Component
 public class TokenKaraListesi {
 
     private final Map<String, Long> gecersizTokenlar = new ConcurrentHashMap<>();
 
-    
-    // Artık jwt süresi değişirse burası da otomatik güncellenir
     @Value("${jwt.expiration}")
     private long tokenOmru;
 
+    /**
+     * Token'ı kara listeye ekler ve süresi dolmuş kayıtları temizler.
+     *
+     * @param token geçersiz kılınacak JWT token
+     */
     public void ekle(String token) {
         temizle();
         gecersizTokenlar.put(token, System.currentTimeMillis());
     }
 
+    /**
+     * Token'ın kara listede olup olmadığını kontrol eder.
+     *
+     * @param token kontrol edilecek JWT token
+     * @return kara listede ise {@code true}
+     */
     public boolean gecersizMi(String token) {
         return gecersizTokenlar.containsKey(token);
     }
@@ -31,8 +47,7 @@ public class TokenKaraListesi {
                 .removeIf(giris -> (simdi - giris.getValue()) > tokenOmru);
     }
 
-    // Her saat başı otomatik temizle — logout olmayan oturumların süresi dolan
-    // tokenları bellekte birikmeden periyodik olarak silinir
+    /** Saatlik periyodik temizleme — süresi dolmuş token'ların bellekte birikmesini önler. */
     @Scheduled(fixedDelay = 3_600_000)
     public void periyodikTemizle() {
         int onceki = gecersizTokenlar.size();

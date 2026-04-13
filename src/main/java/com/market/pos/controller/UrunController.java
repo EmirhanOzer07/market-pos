@@ -46,6 +46,7 @@ public class UrunController {
     @Autowired private CacheManager cacheManager;
 
     private static final int MAX_SATIR = 10_000;
+    private static final long MAX_DOSYA_BOYUTU = 5L * 1024 * 1024; // 5 MB
 
     private Kullanici getAktifKullanici() {
         String kullaniciAdi = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -105,7 +106,7 @@ public class UrunController {
             throw new IllegalArgumentException("Sadece .csv veya .txt yüklenebilir!");
         }
 
-        if (dosya.getSize() > 5 * 1024 * 1024) {
+        if (dosya.getSize() > MAX_DOSYA_BOYUTU) {
             throw new IllegalArgumentException("Dosya 5MB'dan büyük olamaz!");
         }
 
