@@ -25,6 +25,7 @@ import java.nio.file.*;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Patron şifresi uzak sunucuda (Railway) doğrulanır — yerel dosyada hash saklanmaz.
@@ -75,10 +76,37 @@ public class SuperAdminController {
                 return;
             }
             apiKey = okunan;
+            patronCfgGuvenliginisAyarla();
             log.info("[PATRON] Yapilandirma yuklendi.");
         } catch (IOException e) {
             log.error("[PATRON] patron.cfg okunamadi: {} | Patron paneli devre disi.", e.getMessage());
             apiKey = null;
+        }
+    }
+
+    /**
+     * patron.cfg dosyasını yalnızca mevcut Windows kullanıcısına kilitler.
+     * icacls komutu: kalıtımsal izinleri kaldırır, sadece okuma izni bırakır.
+     * VeriTabaniAnahtarService.kullaniciIzinleriAyarla() ile aynı pattern.
+     */
+    private void patronCfgGuvenliginisAyarla() {
+        try {
+            String dosyaYolu = CFG_DOSYASI.toAbsolutePath().toString();
+            String kullanici  = System.getProperty("user.name");
+            ProcessBuilder pb = new ProcessBuilder(
+                    "icacls", dosyaYolu,
+                    "/inheritance:r",
+                    "/grant:r", kullanici + ":(R)"
+            );
+            pb.redirectErrorStream(true);
+            int sonuc = pb.start().waitFor();
+            if (sonuc == 0) {
+                log.info("[PATRON] patron.cfg izinleri kisitlandi (sadece: {})", kullanici);
+            } else {
+                log.warn("[PATRON] patron.cfg icacls izin ayari basarisiz — devam ediliyor");
+            }
+        } catch (Exception e) {
+            log.warn("[PATRON] patron.cfg izinleri ayarlanamadi: {}", e.getMessage());
         }
     }
 
@@ -222,6 +250,7 @@ public class SuperAdminController {
     @PutMapping("/lisans-uzat/{marketId}")
     public ResponseEntity<?> lisansUzat(
             @PathVariable Long marketId,
+            @RequestParam(defaultValue = "12") int ay,
             @RequestHeader(value = "X-Admin-Secret", required = false) String secret,
             HttpServletRequest request) {
 
@@ -237,6 +266,11 @@ public class SuperAdminController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erisim!");
         }
 
+        if (ay < 1 || ay > 120) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Gecersiz sure: 1-120 ay arasinda olmalidir.");
+        }
+
         Market market = marketRepository.findById(marketId).orElse(null);
         if (market == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Market bulunamadi!");
@@ -244,12 +278,93 @@ public class SuperAdminController {
 
         LocalDate mevcutTarih = market.getLisansBitisTarihi() != null
                 ? market.getLisansBitisTarihi() : LocalDate.now();
-        LocalDate yeniTarih = mevcutTarih.plusYears(1);
+        LocalDate yeniTarih = mevcutTarih.plusMonths(ay);
         market.setLisansBitisTarihi(yeniTarih);
         marketRepository.save(market);
 
         auditLogger.logSuccessfulAdminAction(ip,
-                "Lisans uzatildi — Market ID: " + marketId + " | Yeni bitis: " + yeniTarih);
+                "Lisans uzatildi — Market ID: " + marketId +
+                " | Sure: " + ay + " ay | Yeni bitis: " + yeniTarih);
         return ResponseEntity.ok("Basarili! Marketin yeni lisans bitis tarihi: " + yeniTarih);
+    }
+
+    @GetMapping("/davetiyeler")
+    public ResponseEntity<?> tumDavetiyeler(
+            @RequestHeader(value = "X-Admin-Secret", required = false) String secret,
+            HttpServletRequest request) {
+
+        String ip = request.getRemoteAddr();
+
+        if (!yerelErisimMi(request)) {
+            auditLogger.logFailedAdminAttempt(ip, "Uzaktan davetiye listeleme engellendi");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erisim!");
+        }
+
+        if (secret == null || !sifreDogrula(secret)) {
+            auditLogger.logFailedAdminAttempt(ip, "Yetkisiz davetiye listeleme denemesi");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erisim!");
+        }
+
+        List<Map<String, Object>> yanit = davetiyeRepo.findAllByOrderByIdDesc().stream()
+                .map(d -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", d.getId());
+                    m.put("kod", d.getKod());
+                    m.put("kullanildiMi", d.isKullanildiMi());
+                    m.put("sonKullanmaTarihi", d.getSonKullanmaTarihi());
+                    String durum;
+                    if (d.isKullanildiMi()) {
+                        durum = "KULLANILDI";
+                    } else if (d.getSonKullanmaTarihi() != null
+                            && d.getSonKullanmaTarihi().isBefore(LocalDate.now())) {
+                        durum = "SURESI_DOLDU";
+                    } else {
+                        durum = "AKTIF";
+                    }
+                    m.put("durum", durum);
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        auditLogger.logSuccessfulAdminAction(ip, "Davetiye listesi cekildi");
+        return ResponseEntity.ok(yanit);
+    }
+
+    @DeleteMapping("/davetiye/{kod}")
+    public ResponseEntity<?> davetiyeIptalEt(
+            @PathVariable String kod,
+            @RequestHeader(value = "X-Admin-Secret", required = false) String secret,
+            HttpServletRequest request) {
+
+        String ip = request.getRemoteAddr();
+
+        if (!yerelErisimMi(request)) {
+            auditLogger.logFailedAdminAttempt(ip, "Uzaktan davetiye iptali engellendi");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erisim!");
+        }
+
+        if (secret == null || !sifreDogrula(secret)) {
+            auditLogger.logFailedAdminAttempt(ip, "Yetkisiz davetiye iptali denemesi");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erisim!");
+        }
+
+        // Kod formatı doğrulama: yalnızca harf, rakam ve tire kabul et
+        if (!kod.matches("[A-Z0-9\\-]{1,20}")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Gecersiz kod formati!");
+        }
+
+        com.market.pos.entity.DavetiyeKodu davetiye = davetiyeRepo.findByKod(kod);
+        if (davetiye == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Davetiye bulunamadi!");
+        }
+
+        if (davetiye.isKullanildiMi()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("Kullanilmis davetiye iptal edilemez!");
+        }
+
+        davetiyeRepo.delete(davetiye);
+        auditLogger.logSuccessfulAdminAction(ip, "Davetiye iptal edildi: " + kod);
+        return ResponseEntity.ok("Davetiye iptal edildi: " + kod);
     }
 }

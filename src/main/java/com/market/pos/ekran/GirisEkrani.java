@@ -88,15 +88,26 @@ public class GirisEkrani {
         String inputKenar = AyarYoneticisi.inputKenarlık();
 
         // ===== BAŞLIK =====
-        Label baslik = new Label("🏪 MARKET POS SİSTEMİ");
-        baslik.setFont(Font.font("Arial", FontWeight.BOLD, 22));
-        baslik.setTextFill(Color.web(metinRenk));
+        // Marka ismi — cyan vurgu
+        Label ozrLabel = new Label("OZR POS");
+        ozrLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        ozrLabel.setTextFill(Color.web("#00d4ff"));
+
+        // Ürün ismi — daha küçük, tema renginde
+        Label marketLabel = new Label("Market POS Sistemi");
+        marketLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        marketLabel.setTextFill(Color.web(metinRenk));
+
+        // İnce yatay ayırıcı çizgi
+        javafx.scene.shape.Line ayrac = new javafx.scene.shape.Line(0, 0, 200, 0);
+        ayrac.setStroke(Color.web("#00d4ff"));
+        ayrac.setOpacity(0.35);
 
         Label altBaslik = new Label("Sisteme giriş yapın");
-        altBaslik.setFont(Font.font("Arial", 13));
+        altBaslik.setFont(Font.font("Arial", 12));
         altBaslik.setTextFill(Color.web(ikincil));
 
-        VBox baslikKutu = new VBox(5, baslik, altBaslik);
+        VBox baslikKutu = new VBox(3, ozrLabel, marketLabel, ayrac, altBaslik);
         baslikKutu.setAlignment(Pos.CENTER);
         baslikKutu.setPadding(new Insets(0, 0, 20, 0));
 
@@ -249,8 +260,8 @@ public class GirisEkrani {
                     e.getCode() == javafx.scene.input.KeyCode.P) {
                 PatronEkrani patron = new PatronEkrani(stage);
                 stage.setScene(patron.olustur());
-                stage.setWidth(700);
-                stage.setHeight(700);
+                stage.setWidth(1100);
+                stage.setHeight(720);
                 stage.centerOnScreen();
             }
         });
@@ -412,7 +423,7 @@ public class GirisEkrani {
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(stage);
-        dialog.setTitle("Market POS Güncelleme");
+        dialog.setTitle("OZR POS Güncelleme");
         dialog.getDialogPane().setContent(govde);
         dialog.getDialogPane().getButtonTypes().clear();
         dialog.getDialogPane().setStyle("-fx-padding: 0;");
@@ -442,7 +453,7 @@ public class GirisEkrani {
         Dialog<Void> dialog = new Dialog<>();
         dialog.initOwner(stage);
         dialog.setTitle("Güncelleniyor");
-        dialog.setHeaderText("Market POS güncelleniyor, lütfen bekleyin...");
+        dialog.setHeaderText("OZR POS güncelleniyor, lütfen bekleyin...");
         dialog.getDialogPane().setContent(icerik);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
 

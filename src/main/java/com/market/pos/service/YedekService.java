@@ -1,22 +1,18 @@
 package com.market.pos.service;
 
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import javax.sql.DataSource;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.StandardCopyOption;
-import java.security.SecureRandom;
-import java.util.HexFormat;
 import java.util.zip.*;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -27,19 +23,23 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.concurrent.locks.ReentrantLock;
 
+// @Lazy(false): spring.main.lazy-initialization=true olsa dahi bu bean'in
+// başlangıçta oluşturulmasını zorunlu kılar — aksi halde @Scheduled ve
+// @PostConstruct hiç çalışmaz.
 @Service
+@Lazy(false)
 public class YedekService {
 
     private static final Logger log = LoggerFactory.getLogger(YedekService.class);
-
-    /** Şifreli yedek dosyalarını tanımlamak için kullanılan 8 baytlık sihirli başlık. */
-    private static final byte[] SIFRE_BASLIGI = "MPOS_ENC".getBytes(StandardCharsets.UTF_8);
 
     @Autowired
     private DataSource dataSource;
 
     @Autowired
     private VeriTabaniAnahtarService anahtarService;
+
+    @Autowired
+    private SifreliDepolamaServisi sifreliDepolamaServisi;
 
     private static final String APPDATA_DIR =
             System.getProperty("user.home") + "/AppData/Local/MarketPOS";
@@ -55,14 +55,12 @@ public class YedekService {
     private final ReentrantLock yedekKilidi = new ReentrantLock();
 
     /**
-     * Uygulama başlarken: Bugün için günlük yedek yoksa al, ardından
-     * veritabanı anahtarını yedek klasörüne kopyala (Google Drive güvencesi).
-     * Veri kaybına karşı ilk savunma hattı.
+     * Spring tam hazır olduğunda (ApplicationReadyEvent) başlangıç yedeği kontrolü yapar.
+     * Thread.sleep kullanılmaz — Spring hazır olduğunu kesin olarak event ile bildirir.
      */
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void baslangiçYedegi() {
         new Thread(() -> {
-            try { Thread.sleep(8000); } catch (InterruptedException ignored) {} // Spring tam ayağa kalksın
             String bugun = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             File gunlukKlasor = new File(GUNLUK_KLASORU);
             File[] bugunYedekleri = gunlukKlasor.listFiles(
@@ -74,7 +72,7 @@ public class YedekService {
                 log.info("[YEDEK] Bugün için günlük yedek mevcut: {}", bugunYedekleri[0].getName());
             }
             anahtarYedekle();
-        }).start();
+        }, "baslangiç-yedek").start();
     }
 
     /**
@@ -201,6 +199,7 @@ public class YedekService {
     private void sqlYedekAlVeZiple(Connection conn, Path zipHedef) throws Exception {
         Path tempSql = zipHedef.resolveSibling(
                 zipHedef.getFileName().toString().replace(".zip", "_temp.sql"));
+        boolean sifrelemeBasarili = false;
         try {
             // 1. SQL export
             try (Statement stmt = conn.createStatement()) {
@@ -216,35 +215,16 @@ public class YedekService {
                 zos.closeEntry();
             }
             // 3. ZIP dosyasını AES-256/GCM ile şifrele
-            yedegSifrele(zipHedef);
+            sifreliDepolamaServisi.sifrele(zipHedef);
+            sifrelemeBasarili = true;
         } finally {
-            Files.deleteIfExists(tempSql);
+            // Temp SQL her durumda siliniyor (şifrelenmemiş ham veri)
+            try { Files.deleteIfExists(tempSql); } catch (Exception ignored) {}
+            // Şifreleme başarısız olduysa yarım/şifrelenmemiş ZIP'i de sil
+            if (!sifrelemeBasarili) {
+                try { Files.deleteIfExists(zipHedef); } catch (Exception ignored) {}
+            }
         }
     }
 
-    /**
-     * Belirtilen dosyayı AES-256/GCM ile şifreler ve üzerine yazar.
-     *
-     * <p>Dosya formatı: {@code MPOS_ENC} (8 bayt) + IV (12 bayt) + şifreli veri.</p>
-     */
-    private void yedegSifrele(Path dosya) throws Exception {
-        String hexAnahtar = anahtarService.anahtarAl();
-        byte[] anahtarBytes = HexFormat.of().parseHex(hexAnahtar);
-
-        byte[] iv = new byte[12];
-        new SecureRandom().nextBytes(iv);
-
-        SecretKeySpec anahtarSpec = new SecretKeySpec(anahtarBytes, "AES");
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, anahtarSpec, new GCMParameterSpec(128, iv));
-
-        byte[] ham = Files.readAllBytes(dosya);
-        byte[] sifreli = cipher.doFinal(ham);
-
-        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(dosya))) {
-            out.write(SIFRE_BASLIGI);
-            out.write(iv);
-            out.write(sifreli);
-        }
-    }
 }

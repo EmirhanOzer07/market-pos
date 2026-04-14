@@ -6,6 +6,8 @@ import com.market.pos.dto.SatisIstegi;
 import com.market.pos.dto.SepetUrunDTO;
 import com.market.pos.security.AuditLogger;
 import com.market.pos.service.KullaniciGuvenlikServisi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/satis")
 public class SatisController {
+    private static final Logger log = LoggerFactory.getLogger(SatisController.class);
     @Autowired private YedekService yedekService;
     @Autowired private AuditLogger auditLogger;
     @Autowired private CacheManager cacheManager;
@@ -86,7 +89,7 @@ public class SatisController {
         for (SepetUrunDTO item : istek.getSepet()) {
             Urun gercekUrun = barkodUrunHaritasi.get(item.getBarkod());
             if (gercekUrun == null) {
-                throw new IllegalArgumentException("Ürün bu markette bulunamadı: " + item.getBarkod());
+                throw new IllegalArgumentException("Sepetteki bir ürün bu markette bulunamadı!");
             }
             toplamTutar = toplamTutar.add(gercekUrun.getFiyat().multiply(BigDecimal.valueOf(item.getAdet())));
             dogrulanmisUrunler.add(gercekUrun);
@@ -115,12 +118,21 @@ public class SatisController {
         }
         satisDetayRepository.saveAll(detaylar);
 
-        auditLogger.logSalesTransaction(
-                kaydedilenSatis.getId(),
-                kasiyer.getKullaniciAdi(),
-                kaydedilenSatis.getToplamTutar()
-        );
-        yedekService.yedekAl("satis");
+        // Audit log ve yedek: transaction dışı etkiler — exception satışı geri almasın
+        try {
+            auditLogger.logSalesTransaction(
+                    kaydedilenSatis.getId(),
+                    kasiyer.getKullaniciAdi(),
+                    kaydedilenSatis.getToplamTutar()
+            );
+        } catch (Exception auditHata) {
+            log.error("[SATIS] Audit log yazılamadı (satış kaydedildi): {}", auditHata.getMessage());
+        }
+        try {
+            yedekService.yedekAl("satis");
+        } catch (Exception yedekHata) {
+            log.warn("[SATIS] Yedek alınamadı (satış kaydedildi): {}", yedekHata.getMessage());
+        }
 
         // Satış özeti cache'ini geçersiz kıl — sonraki ozet isteği güncel veriyi çeker
         org.springframework.cache.Cache ozetCache = cacheManager.getCache("satisOzeti");

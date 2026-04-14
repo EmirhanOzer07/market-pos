@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * {@link DavetiyeKodu} entity'si için veri erişim katmanı.
  */
@@ -13,6 +15,9 @@ public interface DavetiyeKoduRepository extends JpaRepository<DavetiyeKodu, Long
 
     /** Koda göre davetiye kaydını döndürür. */
     DavetiyeKodu findByKod(String kod);
+
+    /** Tüm davetiye kodlarını yeniden eskiye sıralı döndürür. */
+    List<DavetiyeKodu> findAllByOrderByIdDesc();
 
     /**
      * Kodu atomik olarak kullanıldı olarak işaretler.

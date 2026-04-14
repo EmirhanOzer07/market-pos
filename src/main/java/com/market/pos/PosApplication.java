@@ -4,7 +4,6 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
-import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -16,9 +15,7 @@ import com.market.pos.ekran.GirisEkrani;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.nio.file.*;
 import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -28,20 +25,20 @@ import java.util.concurrent.CompletableFuture;
  * {@link GirisEkrani} ile gösterilir. Sistem tepsisi, güncelleme kontrolü ve
  * patron şifresi yükleme de bu sınıfta yönetilir.</p>
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration.class
+})
 @org.springframework.scheduling.annotation.EnableScheduling
 public class PosApplication extends Application {
-
-    private static final String APPDATA_DIR =
-            System.getProperty("user.home") + "/AppData/Local/MarketPOS";
-    private static final String CONFIG_DOSYASI = APPDATA_DIR + "/config.properties";
 
     private static ConfigurableApplicationContext springCtx;
     private static final CompletableFuture<Void> springHazir = new CompletableFuture<>();
     private Stage anaEkran;
 
     public static void main(String[] args) throws Exception {
-        configHazirla();
+        ConfigManager.hazirla();
         System.setProperty("java.awt.headless", "false");
 
         // Spring'i arka planda başlat — JavaFX'i BEKLETME
@@ -65,7 +62,7 @@ public class PosApplication extends Application {
     public void start(Stage stage) {
         this.anaEkran = stage;
 
-        stage.setTitle("Market POS Sistemi");
+        stage.setTitle("OZR POS");
         stage.setMinWidth(500);
         stage.setMinHeight(400);
         stage.setWidth(500);
@@ -75,6 +72,15 @@ public class PosApplication extends Application {
         // Yükleniyor ekranını hemen göster
         stage.setScene(yukleniyorSahnesiOlustur());
         stage.show();
+
+        // İkonu oluştur ve pencereye ekle
+        try {
+            ikonOlustur(); // AppData'ya kaydeder
+            java.io.File ikonDosya = new java.io.File(ConfigManager.APPDATA_DIR + "/pos-icon.png");
+            if (ikonDosya.exists()) {
+                stage.getIcons().add(new javafx.scene.image.Image(ikonDosya.toURI().toString()));
+            }
+        } catch (Exception ignored) {}
 
         // Spring hazır olunca giriş ekranına geç
         springHazir.whenComplete((v, hata) -> Platform.runLater(() -> {
@@ -103,7 +109,7 @@ public class PosApplication extends Application {
             alert.initOwner(stage);
             alert.setTitle("Çıkış");
             alert.setHeaderText(null);
-            alert.setContentText("Market POS kapatılsın mı?\nKapatılırsa satış yapılamaz.");
+            alert.setContentText("OZR POS kapatılsın mı?\nKapatılırsa satış yapılamaz.");
 
             javafx.scene.control.ButtonType evetBtn =
                     new javafx.scene.control.ButtonType("Evet, Kapat",
@@ -131,27 +137,27 @@ public class PosApplication extends Application {
                 new javafx.scene.control.ProgressIndicator(-1);
         spinner.setMaxSize(60, 60);
 
-        Label baslik = new Label("MARKET POS");
+        Label baslik = new Label("OZR POS");
         baslik.setFont(javafx.scene.text.Font.font("Arial",
                 javafx.scene.text.FontWeight.BOLD, 22));
-        baslik.setTextFill(javafx.scene.paint.Color.web("#2c3e50"));
+        baslik.setTextFill(javafx.scene.paint.Color.web("#00d4ff"));
 
         Label alt = new Label("Sistem başlatılıyor...");
         alt.setFont(javafx.scene.text.Font.font("Arial", 13));
-        alt.setTextFill(javafx.scene.paint.Color.web("#7f8c8d"));
+        alt.setTextFill(javafx.scene.paint.Color.web("#8faac0"));
 
         javafx.scene.layout.VBox kutu = new javafx.scene.layout.VBox(18,
                 baslik, spinner, alt);
         kutu.setAlignment(javafx.geometry.Pos.CENTER);
 
         javafx.scene.layout.StackPane root = new javafx.scene.layout.StackPane(kutu);
-        root.setStyle("-fx-background-color: #ecf0f1;");
+        root.setStyle("-fx-background-color: #0d1b2a;");
         return new Scene(root, 500, 400);
     }
 
     private void pencereBoyutunuYukle(Stage stage) {
         try {
-            File configDosya = new File(CONFIG_DOSYASI);
+            File configDosya = new File(ConfigManager.APPDATA_DIR + "/config.properties");
             if (!configDosya.exists()) return;
             Properties props = new Properties();
             try (InputStream is = new FileInputStream(configDosya)) {
@@ -168,7 +174,7 @@ public class PosApplication extends Application {
 
     private void pencereBoyutunuKaydet(Stage stage) {
         try {
-            File configDosya = new File(CONFIG_DOSYASI);
+            File configDosya = new File(ConfigManager.APPDATA_DIR + "/config.properties");
             Properties props = new Properties();
             if (configDosya.exists()) {
                 try (InputStream is = new FileInputStream(configDosya)) {
@@ -178,7 +184,7 @@ public class PosApplication extends Application {
             props.setProperty("PENCERE_GENISLIK", String.valueOf((int) stage.getWidth()));
             props.setProperty("PENCERE_YUKSEKLIK", String.valueOf((int) stage.getHeight()));
             try (OutputStream os = new FileOutputStream(configDosya)) {
-                props.store(os, "Market POS - Uygulama Yapilandirmasi");
+                props.store(os, "OZR POS - Uygulama Yapilandirmasi");
             }
         } catch (Exception ignored) {}
     }
@@ -189,7 +195,7 @@ public class PosApplication extends Application {
         cubuk.setAlignment(Pos.CENTER_LEFT);
         cubuk.setSpacing(10);
 
-        Label baslik = new Label("🏪 Market POS Sistemi");
+        Label baslik = new Label("OZR POS");
         baslik.setStyle("-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;");
 
         javafx.scene.layout.Region bosluk = new javafx.scene.layout.Region();
@@ -230,12 +236,12 @@ public class PosApplication extends Application {
 
     private void baslatTray(Stage stage) {
         try {
-            TrayIcon trayIcon = new TrayIcon(ikonOlustur(), "Market POS Sistemi");
+            TrayIcon trayIcon = new TrayIcon(ikonOlustur(), "OZR POS");
             trayIcon.setImageAutoSize(true);
 
             PopupMenu menu = new PopupMenu();
 
-            MenuItem baslik = new MenuItem("Market POS v1.0");
+            MenuItem baslik = new MenuItem("OZR POS v1.0");
             baslik.setEnabled(false);
 
             MenuItem goster = new MenuItem("Pencereyi Goster");
@@ -248,7 +254,7 @@ public class PosApplication extends Application {
             cikis.addActionListener(e -> {
                 int secim = javax.swing.JOptionPane.showConfirmDialog(
                         null,
-                        "Market POS kapatilsin mi?\nKapatilirsa satis yapilamaz.",
+                        "OZR POS kapatilsin mi?\nKapatilirsa satis yapilamaz.",
                         "Programi Kapat",
                         javax.swing.JOptionPane.YES_NO_OPTION,
                         javax.swing.JOptionPane.WARNING_MESSAGE
@@ -281,161 +287,15 @@ public class PosApplication extends Application {
     }
 
     private static Image ikonOlustur() {
-        BufferedImage img = new BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = img.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        BufferedImage img = com.market.pos.build.IconMaker.ikonCiz(256);
 
-        // Arka plan — koyu yeşil yuvarlak
-        g.setColor(new Color(27, 94, 32));
-        g.fillRoundRect(8, 8, 240, 240, 48, 48);
-
-        // İç parlama efekti
-        g.setColor(new Color(76, 175, 80));
-        g.fillRoundRect(16, 16, 224, 112, 40, 40);
-        g.setColor(new Color(27, 94, 32));
-        g.fillRoundRect(16, 80, 224, 80, 0, 0);
-
-        // "POS" yazısı
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 80));
-        FontMetrics fm = g.getFontMetrics();
-        int x = (256 - fm.stringWidth("POS")) / 2;
-        g.drawString("POS", x, 145);
-
-        // Alt çizgi ve market yazısı
-        g.setColor(new Color(165, 214, 167));
-        g.setFont(new Font("Arial", Font.BOLD, 30));
-        fm = g.getFontMetrics();
-        x = (256 - fm.stringWidth("MARKET")) / 2;
-        g.drawString("MARKET", x, 195);
-
-        // Üst barkod çizgileri dekorasyon
-        g.setColor(new Color(200, 230, 201));
-        for (int i = 0; i < 8; i++) {
-            int genislik = (i % 2 == 0) ? 4 : 2;
-            g.fillRect(50 + i * 14, 28, genislik, 30);
-        }
-
-        g.dispose();
-
-        // İkonu AppData'ya kaydet (jpackage için)
+        // AppData'ya kaydet (sistem tepsisi + JavaFX pencere ikonu için)
         try {
-            File ikonDosya = new File(APPDATA_DIR + "/pos-icon.png");
+            File ikonDosya = new File(ConfigManager.APPDATA_DIR + "/pos-icon.png");
             javax.imageio.ImageIO.write(img, "PNG", ikonDosya);
         } catch (Exception ignored) {}
 
         return img;
     }
-
-    private static final String UYGULAMA_VERSIYONU = "1.0.0";
-
-    private static void configHazirla() throws IOException {
-        Files.createDirectories(Paths.get(APPDATA_DIR + "/temp"));
-        System.setProperty("java.io.tmpdir", APPDATA_DIR + "/temp");
-        Files.createDirectories(Paths.get(APPDATA_DIR));
-
-        versiyonDosyasiKontrol();
-
-        File configDosya = new File(CONFIG_DOSYASI);
-        if (!configDosya.exists()) {
-            ilkKurulumYap(configDosya);
-        }
-        configYukle(configDosya);
-
-        // Port çakışması önleme: 8080'den başla, doluysa 8081..8090
-        int port = portBul();
-        System.setProperty("server.port", String.valueOf(port));
-    }
-
-    /** 8080-8090 arasında boş port bulur. */
-    private static int portBul() {
-        for (int p = 8080; p <= 8090; p++) {
-            try (java.net.ServerSocket ss = new java.net.ServerSocket(p)) {
-                ss.setReuseAddress(true);
-                return p;
-            } catch (IOException ignored) {}
-        }
-        return 8080;
-    }
-
-    private static void versiyonDosyasiKontrol() {
-        Path versiyonYolu = Paths.get(APPDATA_DIR + "/version.txt");
-        try {
-            if (!Files.exists(versiyonYolu)) {
-                Files.writeString(versiyonYolu, UYGULAMA_VERSIYONU);
-            }
-            // İleride: dosyadan okunan versiyon ile UYGULAMA_VERSIYONU karşılaştırılabilir
-        } catch (IOException e) {
-            System.err.println("Versiyon dosyası oluşturulamadı: " + e.getMessage());
-        }
-    }
-
-    private static void ilkKurulumYap(File configDosya) throws IOException {
-        Properties props = new Properties();
-
-        // Her kurulum için benzersiz rastgele değerler üret — kaynak kodda YAZILMAZ
-        String jwtSecret = UUID.randomUUID().toString().replace("-", "")
-                + UUID.randomUUID().toString().replace("-", "");
-        String dbSifresi = UUID.randomUUID().toString().replace("-", "");
-
-        props.setProperty("JWT_SECRET", jwtSecret);
-        props.setProperty("DB_KULLANICI_SIFRESI", dbSifresi);
-
-        // Patron şifresi düz metin değil — hash olarak sakla
-        props.setProperty("SUPERADMIN_KEY_HASH", hashle("patron123"));
-
-        try (OutputStream os = new FileOutputStream(configDosya)) {
-            props.store(os, "Market POS - Uygulama Yapilandirmasi\n# BU DOSYAYI SILMEYIN");
-        }
-    }
-
-    private static void configYukle(File configDosya) throws IOException {
-        Properties props = new Properties();
-        try (InputStream is = new FileInputStream(configDosya)) {
-            props.load(is);
-        }
-        for (String key : props.stringPropertyNames()) {
-            if (System.getenv(key) == null && System.getProperty(key) == null) {
-                System.setProperty(key, props.getProperty(key));
-            }
-        }
-
-        // Eski kurulum migrasyonu: DB_KULLANICI_SIFRESI yoksa config'e ekle.
-        // Eski kurulumlar "pos_db_2024!" ile şifreli DB'ye sahip olduğundan
-        // aynı değeri config'e yazıyoruz. Artık kaynak kodda değil, config.properties'de.
-        // Yeni kurulumlar ilkKurulumYap'ta rastgele değer alır.
-        if (!props.containsKey("DB_KULLANICI_SIFRESI")) {
-            String eskiSifre = "pos_db_2024!"; // Eski hardcoded değer — sadece migrasyon için
-            props.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
-            System.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
-            try (OutputStream os = new FileOutputStream(configDosya)) {
-                props.store(os, "Market POS - Migrasyon guncellendi");
-            }
-        }
-
-        // Environment variable'dan patron şifresi geldiyse hash'le
-        String patronKey = System.getenv("SUPERADMIN_KEY");
-        if (patronKey != null) {
-            System.setProperty("SUPERADMIN_KEY_HASH", hashle(patronKey));
-        }
-    }
-
-    /** SHA-256 ile hash hesaplar; patron şifresi bellekte düz metin olarak saklanmaz. */
-    private static String hashle(String metin) {
-        try {
-            java.security.MessageDigest md =
-                    java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(
-                    metin.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
 
 }

@@ -1,5 +1,6 @@
 package com.market.pos.config;
 
+import com.market.pos.service.SifreliDepolamaServisi;
 import com.market.pos.service.VeriTabaniAnahtarService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -10,15 +11,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import javax.sql.DataSource;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.zip.*;
 import java.sql.DriverManager;
 
@@ -58,6 +54,9 @@ public class DataSourceConfig {
 
     @Autowired
     private VeriTabaniAnahtarService anahtarService;
+
+    @Autowired
+    private SifreliDepolamaServisi sifreliDepolamaServisi;
 
     private static final Path RESTORE_FLAG = Paths.get(
             System.getProperty("user.home"), "AppData", "Local", "MarketPOS", "pending_restore.flag");
@@ -150,10 +149,9 @@ public class DataSourceConfig {
         try {
             byte[] ham = Files.readAllBytes(backupZip);
             byte[] zipBytes;
-            if (ham.length > 8 &&
-                    "MPOS_ENC".equals(new String(ham, 0, 8, StandardCharsets.UTF_8))) {
+            if (sifreliDepolamaServisi.sifrelimi(ham)) {
                 log.info("[GERİ YÜKLEME] Şifreli yedek tespit edildi, çözülüyor...");
-                zipBytes = yedekSifresiniCoz(ham);
+                zipBytes = sifreliDepolamaServisi.coz(ham);
             } else {
                 zipBytes = ham;
             }
@@ -191,24 +189,6 @@ public class DataSourceConfig {
 
         // 4. Başarılı → .bak'ı temizle
         try { Files.deleteIfExists(mvDbBak); } catch (Exception ignored) {}
-    }
-
-    /**
-     * MPOS_ENC formatındaki şifreli yedek baytlarını AES-256/GCM ile çözer.
-     *
-     * <p>Beklenen format: {@code MPOS_ENC} (8 bayt) + IV (12 bayt) + şifreli veri.</p>
-     */
-    private byte[] yedekSifresiniCoz(byte[] sifreliBayt) throws Exception {
-        String hexAnahtar = anahtarService.anahtarAl();
-        byte[] anahtarBytes = HexFormat.of().parseHex(hexAnahtar);
-
-        byte[] iv          = Arrays.copyOfRange(sifreliBayt, 8, 20);
-        byte[] sifreliVeri = Arrays.copyOfRange(sifreliBayt, 20, sifreliBayt.length);
-
-        SecretKeySpec anahtarSpec = new SecretKeySpec(anahtarBytes, "AES");
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, anahtarSpec, new GCMParameterSpec(128, iv));
-        return cipher.doFinal(sifreliVeri);
     }
 
     private void geriAlBak(Path mvDb, Path mvDbBak) {

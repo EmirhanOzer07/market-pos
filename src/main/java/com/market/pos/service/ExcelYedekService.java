@@ -10,6 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,8 +29,13 @@ import java.util.*;
  * Her market için ayrı sayfa + "Tüm Ürünler" özet sayfası.
  * Klasörde en fazla 20 dosya saklanır (dönen yedekleme).
  * Google Drive klasörü → backup.excel.path ile ayarlanır.
+ *
+ * @Lazy(false): spring.main.lazy-initialization=true olsa dahi bu bean'in
+ * başlangıçta oluşturulmasını zorunlu kılar — aksi halde @Scheduled ve
+ * @PostConstruct hiç çalışmaz.
  */
 @Service
+@Lazy(false)
 public class ExcelYedekService {
 
     private static final Logger log = LoggerFactory.getLogger(ExcelYedekService.class);
@@ -44,10 +52,9 @@ public class ExcelYedekService {
     // ─────────────────────────────────────────────
     // Başlangıç kontrolü — bugün Excel yedeği yoksa al
     // ─────────────────────────────────────────────
-    @jakarta.annotation.PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void baslangiçExcelYedegi() {
         new Thread(() -> {
-            try { Thread.sleep(10000); } catch (InterruptedException ignored) {} // Spring tam ayağa kalksın
             String bugun = java.time.LocalDate.now()
                     .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             Path klasor = klasorYolu();
@@ -64,7 +71,7 @@ public class ExcelYedekService {
             } else {
                 log.info("[EXCEL YEDEK] Bugün için Excel yedeği mevcut: {}", bugunYedekleri[0].getName());
             }
-        }).start();
+        }, "baslangiç-excel-yedek").start();
     }
 
     // ─────────────────────────────────────────────

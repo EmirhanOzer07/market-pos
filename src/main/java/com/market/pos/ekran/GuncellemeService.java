@@ -92,7 +92,7 @@ public class GuncellemeService {
             HttpRequest istek = HttpRequest.newBuilder()
                     .uri(URI.create(GITHUB_API_URL))
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "MarketPOS/" + kurulu)
+                    .header("User-Agent", "OZRPos/" + kurulu)
                     .timeout(Duration.ofSeconds(10))
                     .GET()
                     .build();
@@ -151,7 +151,7 @@ public class GuncellemeService {
             HttpRequest headIstek = HttpRequest.newBuilder()
                     .uri(URI.create(indirmeUrl))
                     .method("HEAD", HttpRequest.BodyPublishers.noBody())
-                    .header("User-Agent", "MarketPOS/" + mevcutSurumOku())
+                    .header("User-Agent", "OZRPos/" + mevcutSurumOku())
                     .timeout(Duration.ofSeconds(10))
                     .build();
             toplamBoyut = INDIR_CLIENT.send(headIstek, HttpResponse.BodyHandlers.discarding())
@@ -161,7 +161,7 @@ public class GuncellemeService {
         // Gerçek indirme
         HttpRequest getIstek = HttpRequest.newBuilder()
                 .uri(URI.create(indirmeUrl))
-                .header("User-Agent", "MarketPOS/" + mevcutSurumOku())
+                .header("User-Agent", "OZRPos/" + mevcutSurumOku())
                 .header("Accept", "application/octet-stream")
                 .timeout(Duration.ofSeconds(300))
                 .build();
@@ -280,7 +280,7 @@ public class GuncellemeService {
                 + "timeout /t 2 /nobreak >nul\r\n"
 
                 // 5. Yeni örneği başlat
-                + "start \"MarketPOS\" \"" + exeYolu + "\"\r\n"
+                + "start \"OZR POS\" \"" + exeYolu + "\"\r\n"
                 + "echo " + ts + " BAT: Uygulama baslatildi >> \"" + logYolu + "\"\r\n"
 
                 + ":cleanup\r\n"

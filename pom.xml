@@ -78,14 +78,11 @@
         </dependency>
 
         <!-- JavaFX — kendi penceresinde uygulama -->
+        <!-- javafx-web ve javafx-swing kodda kullanılmıyor; bundled runtime'da zaten var. -->
+        <!-- javafx-controls, javafx-graphics, javafx-base transitif olarak çeker. -->
         <dependency>
             <groupId>org.openjfx</groupId>
-            <artifactId>javafx-web</artifactId>
-            <version>21</version>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-swing</artifactId>
+            <artifactId>javafx-controls</artifactId>
             <version>21</version>
         </dependency>
 
@@ -150,17 +147,20 @@
                 <artifactId>jpackage-maven-plugin</artifactId>
                 <version>1.6.5</version>
                 <configuration>
-                    <name>MarketPOS</name>
+                    <name>OZRPos</name>
                     <appVersion>1.0.0</appVersion>
-                    <vendor>Market POS</vendor>
-                    <destination>C:/MarketPOS-build</destination>
+                    <vendor>OZR</vendor>
+                    <destination>C:/OZRPos-build</destination>
                     <input>target/app-input</input>
                     <mainJar>pos-0.0.1-SNAPSHOT.jar</mainJar>
-                    <mainClass>com.market.pos.PosApplication</mainClass>
+                    <mainClass>org.springframework.boot.loader.launch.JarLauncher</mainClass>
                     <type>APP_IMAGE</type>
+                    <icon>target/icon.ico</icon>
                     <javaOptions>
                         <option>-Xmx256m</option>
                         <option>-Dfile.encoding=UTF-8</option>
+                        <option>-Djpackage.app-version=1.0.0</option>
+                        <option>-Djava.awt.headless=false</option>
                     </javaOptions>
                 </configuration>
             </plugin>

@@ -95,7 +95,7 @@ public class AyarYoneticisi {
             props.setProperty("TEMA", koyu ? "KOYU" : "ACIK");
             props.setProperty("SES",  sesAcik ? "ACIK" : "KAPALI");
             try (OutputStream os = new FileOutputStream(CONFIG_YOLU.toFile())) {
-                props.store(os, "Market POS - Uygulama Yapilandirmasi");
+                props.store(os, "OZR POS - Uygulama Yapilandirmasi");
             }
         } catch (Exception e) {
             log.warn("[AYAR] Config kaydedilemedi: {}", e.getMessage());

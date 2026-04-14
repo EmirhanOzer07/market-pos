@@ -8,12 +8,16 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Spring Boot backend ile HTTP iletişimi kuran istemci yardımcı sınıfı.
  *
- * <p>JWT token'ı statik olarak tutar; tüm isteklere {@code Authorization: Bearer} başlığı ekler.
+ * <p>JWT token'ı atomik olarak tutar; tüm isteklere {@code Authorization: Bearer} başlığı ekler.
  * HTTP 5xx yanıtları {@link IOException} fırlatır.</p>
+ *
+ * <p>Oturum bilgisi ({token, marketId, kullaniciAdi, rol}) tek bir {@link AtomicReference} ile
+ * yönetilir — dört ayrı volatile alan yerine tek atomik okuma/yazma garantisi sağlanır.</p>
  */
 public class ApiClient {
 
@@ -22,41 +26,57 @@ public class ApiClient {
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    /** Giriş sonrası kaydedilen JWT token; UI ve arka plan thread'leri arasında görünürlük için volatile. */
-    private static volatile String jwtToken = null;
-    private static volatile Long marketId = null;
-    private static volatile String kullaniciAdi = null;
-    private static volatile String rol = null;
+    /**
+     * Tek AtomicReference ile tüm oturum bilgisi atomik olarak okunur/yazılır.
+     * null → oturum kapalı.
+     */
+    private static final AtomicReference<OturumBilgisi> oturum = new AtomicReference<>(null);
+
+    /** Oturum bilgisini taşıyan değişmez kayıt. */
+    private record OturumBilgisi(String token, Long marketId, String kullaniciAdi, String rol) {}
 
     // ===================== TOKEN YÖNETİMİ =====================
 
     public static void tokenKaydet(String token, Long mktId, String kAdi, String r) {
-        jwtToken = token;
-        marketId = mktId;
-        kullaniciAdi = kAdi;
-        rol = r;
+        oturum.set(new OturumBilgisi(token, mktId, kAdi, r));
     }
 
     public static void tokenTemizle() {
-        jwtToken = null;
-        marketId = null;
-        kullaniciAdi = null;
-        rol = null;
+        oturum.set(null);
     }
 
-    public static String getToken() { return jwtToken; }
-    public static Long getMarketId() { return marketId; }
-    public static String getKullaniciAdi() { return kullaniciAdi; }
-    public static String getRol() { return rol; }
-    public static boolean girisYapildiMi() { return jwtToken != null; }
+    public static String getToken() {
+        OturumBilgisi o = oturum.get();
+        return o != null ? o.token() : null;
+    }
+
+    public static Long getMarketId() {
+        OturumBilgisi o = oturum.get();
+        return o != null ? o.marketId() : null;
+    }
+
+    public static String getKullaniciAdi() {
+        OturumBilgisi o = oturum.get();
+        return o != null ? o.kullaniciAdi() : null;
+    }
+
+    public static String getRol() {
+        OturumBilgisi o = oturum.get();
+        return o != null ? o.rol() : null;
+    }
+
+    public static boolean girisYapildiMi() {
+        return oturum.get() != null;
+    }
 
     // ===================== HTTP METODLARI =====================
 
     // GET isteği — JWT ile
     public static Map<String, Object> get(String endpoint) throws Exception {
+        String token = getToken();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .GET()
                 .build();
@@ -78,9 +98,10 @@ public class ApiClient {
     // GET — Liste döner
     @SuppressWarnings("unchecked")
     public static java.util.List<Map<String, Object>> getList(String endpoint) throws Exception {
+        String token = getToken();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .GET()
                 .build();
@@ -98,10 +119,11 @@ public class ApiClient {
     // POST isteği — JWT ile
     public static Map<String, Object> post(String endpoint, Object body) throws Exception {
         String json = mapper.writeValueAsString(body);
+        String token = getToken();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
@@ -131,10 +153,11 @@ public class ApiClient {
     // PUT isteği
     public static Map<String, Object> put(String endpoint, Object body) throws Exception {
         String json = mapper.writeValueAsString(body);
+        String token = getToken();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString(json))
                 .build();
@@ -164,9 +187,10 @@ public class ApiClient {
 
     // DELETE isteği — başarısızsa {"hata":"..."} mesajını exception olarak fırlatır
     public static int delete(String endpoint) throws Exception {
+        String token = getToken();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .DELETE()
                 .build();
 
@@ -187,10 +211,11 @@ public class ApiClient {
 
     // Çıkış yap
     public static void cikisYap() throws Exception {
-        if (jwtToken == null) return;
+        String token = getToken();
+        if (token == null) return;
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/api/auth/cikis"))
-                .header("Authorization", "Bearer " + jwtToken)
+                .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         client.send(request, HttpResponse.BodyHandlers.ofString());
