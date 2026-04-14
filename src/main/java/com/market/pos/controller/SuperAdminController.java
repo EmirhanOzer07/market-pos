@@ -11,25 +11,27 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import com.market.pos.security.AuditLogger;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.*;
 
 /**
- * Patron şifresi application.properties veya env var'da değil,
- * %APPDATA%\Local\MarketPOS\patron.hash dosyasında saklanır.
+ * Patron şifresi uzak sunucuda (Railway) doğrulanır — yerel dosyada hash saklanmaz.
  *
- * Bu dosya git'e girmez → CWE-798 (hard-coded credentials) riski yok.
- * Yeni kurulumlar BCrypt kullanır. Eski SHA-256 hash'ler ilk başarılı girişte otomatik migrate edilir.
- *
- * Şifre sıfırlamak için patron.hash dosyasını silin — uygulama varsayılan şifreyle yeniden oluşturur.
+ * <p>API key: AppData/Local/MarketPOS/patron.cfg dosyasında saklanır.
+ * Bu dosya git'e girmez, JAR'a dahil edilmez. Geliştirici tarafından kurulum sırasında oluşturulur.
+ * Dosya eksikse patron paneli tamamen kilitlenir.</p>
  */
 @RestController
 @RequestMapping("/api/superadmin")
@@ -37,111 +39,90 @@ public class SuperAdminController {
 
     private static final Logger log = LoggerFactory.getLogger(SuperAdminController.class);
 
-    // AppData/Local/MarketPOS — veritabanıyla aynı klasör, git'in dışında
-    private static final Path HASH_DOSYASI = Paths.get(
+    private static final Path CFG_DOSYASI = Paths.get(
             System.getProperty("user.home"),
-            "AppData", "Local", "MarketPOS", "patron.hash");
+            "AppData", "Local", "MarketPOS", "patron.cfg");
+
+    private static final String PATRON_SERVER_URL =
+            "https://marketpos-patron-server-production.up.railway.app/patron/dogrula";
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Autowired private AuditLogger auditLogger;
     @Autowired private DavetiyeKoduRepository davetiyeRepo;
     @Autowired private MarketRepository marketRepository;
-    @Autowired private BCryptPasswordEncoder passwordEncoder;
 
-    private String patronSifresiHash;
+    /** Railway API key — patron.cfg'den yüklenir, null ise panel kilitli. */
+    private String apiKey;
 
-    /**
-     * Uygulama başlarken hash'i AppData'dan yükle.
-     * - Dosya yoksa BCrypt("patron123") ile oluştur (yeni kurulum).
-     * - Eski SHA-256 format (64 hex) geçerli — ilk başarılı girişte otomatik BCrypt'e migrate edilir.
-     */
     @PostConstruct
-    private void hashYukle() {
+    private void configYukle() {
         try {
-            Files.createDirectories(HASH_DOSYASI.getParent());
-
-            if (!Files.exists(HASH_DOSYASI)) {
-                // Yeni kurulum: direkt BCrypt ile oluştur
-                String bcryptDefault = passwordEncoder.encode("patron123");
-                Files.writeString(HASH_DOSYASI, bcryptDefault, StandardCharsets.UTF_8);
-                patronSifresiHash = bcryptDefault;
-                log.warn("Patron hash dosyası oluşturuldu (BCrypt): {} | " +
-                         "Varsayılan şifre: patron123 | Güvenlik için değiştirin!", HASH_DOSYASI);
+            if (!Files.exists(CFG_DOSYASI)) {
+                log.error("[PATRON] patron.cfg bulunamadi: {} | Patron paneli devre disi.", CFG_DOSYASI);
+                apiKey = null;
                 return;
             }
-
-            String okunan = Files.readString(HASH_DOSYASI, StandardCharsets.UTF_8).trim();
-            // PowerShell UTF-8 BOM'unu temizle (\uFEFF)
+            String okunan = Files.readString(CFG_DOSYASI, StandardCharsets.UTF_8).trim();
             if (okunan.startsWith("\uFEFF")) okunan = okunan.substring(1);
-
-            // BCrypt format: $2a$, $2b$, $2y$ ile başlar
-            if (okunan.startsWith("$2")) {
-                patronSifresiHash = okunan;
-                log.info("Patron BCrypt hash yüklendi: {}", HASH_DOSYASI);
-            } else if (okunan.matches("[0-9a-f]{64}")) {
-                // Eski SHA-256 format — geçerli, ilk başarılı girişte migrate edilecek
-                patronSifresiHash = okunan;
-                log.info("Patron SHA-256 hash yüklendi (ilk başarılı girişte BCrypt'e migrate edilecek): {}",
-                        HASH_DOSYASI);
-            } else {
-                log.error("patron.hash geçersiz format — varsayılan BCrypt kullanılıyor. " +
-                          "Dosyayı silerek uygulamayı yeniden başlatın.");
-                patronSifresiHash = passwordEncoder.encode("patron123");
+            if (okunan.isBlank()) {
+                log.error("[PATRON] patron.cfg bos | Patron paneli devre disi.");
+                apiKey = null;
+                return;
             }
-
+            apiKey = okunan;
+            log.info("[PATRON] Yapilandirma yuklendi.");
         } catch (IOException e) {
-            log.error("patron.hash okunamadı, varsayılan BCrypt kullanılıyor: {}", e.getMessage());
-            patronSifresiHash = passwordEncoder.encode("patron123");
+            log.error("[PATRON] patron.cfg okunamadi: {} | Patron paneli devre disi.", e.getMessage());
+            apiKey = null;
         }
     }
 
     /**
-     * Şifre doğrulama — BCrypt ve eski SHA-256 formatlarını destekler.
-     * SHA-256 eşleşmesi durumunda dosya BCrypt'e otomatik migrate edilir.
+     * Şifreyi Railway sunucusunda doğrular.
+     * API key eksikse veya sunucuya ulaşılamazsa false döner.
      */
-    private boolean sifreDogrula(String giris) {
-        if (patronSifresiHash.startsWith("$2")) {
-            // BCrypt format
-            return passwordEncoder.matches(giris, patronSifresiHash);
+    private boolean sifreDogrula(String sifre) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("[PATRON] API key yok — patron paneli kilitli.");
+            return false;
         }
-        // Eski SHA-256 format
-        boolean eslesme = patronSifresiHash.equals(sha256Hashle(giris));
-        if (eslesme) {
-            // Başarılı — BCrypt'e migrate et
-            try {
-                String yeniHash = passwordEncoder.encode(giris);
-                Files.writeString(HASH_DOSYASI, yeniHash, StandardCharsets.UTF_8);
-                patronSifresiHash = yeniHash;
-                log.info("patron.hash SHA-256'dan BCrypt'e otomatik migrate edildi.");
-            } catch (Exception e) {
-                log.warn("patron.hash BCrypt migrate edilemedi: {}", e.getMessage());
-            }
+        try {
+            String json = MAPPER.writeValueAsString(Map.of("sifre", sifre));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(PATRON_SERVER_URL))
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(request,
+                    HttpResponse.BodyHandlers.ofString());
+
+            return response.statusCode() == 200 && response.body().contains("\"ok\"");
+
+        } catch (Exception e) {
+            log.error("[PATRON] Sunucuya baglanılamadi: {}", e.getMessage());
+            return false;
         }
-        return eslesme;
+    }
+
+    /** Sadece localhost erişebilir. */
+    private boolean yerelErisimMi(HttpServletRequest request) {
+        String ip = request.getRemoteAddr();
+        return ip.equals("127.0.0.1") || ip.equals("0:0:0:0:0:0:0:1");
     }
 
     @lombok.Getter
     @lombok.Setter
     public static class DavetiyeUretIstek {
         private String sifresi;
-    }
-
-    // Sadece localhost erişebilir
-    private boolean yerelErisimMi(HttpServletRequest request) {
-        String ip = request.getRemoteAddr();
-        return ip.equals("127.0.0.1") || ip.equals("0:0:0:0:0:0:0:1");
-    }
-
-    // SHA-256 — sadece eski patron.hash formatı migrate edilirken kullanılır
-    private String sha256Hashle(String metin) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(metin.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     @PostMapping("/dogrula")
@@ -153,23 +134,28 @@ public class SuperAdminController {
 
         if (!yerelErisimMi(request)) {
             response.put("basarili", false);
-            response.put("mesaj", "Sadece yerel erişim!");
+            response.put("mesaj", "Sadece yerel erisim!");
             return response;
         }
 
         if (istek.getSifresi() == null || istek.getSifresi().isBlank()) {
             response.put("basarili", false);
-            response.put("mesaj", "Şifre boş olamaz!");
+            response.put("mesaj", "Sifre bos olamaz!");
+            return response;
+        }
+
+        if (apiKey == null) {
+            response.put("basarili", false);
+            response.put("mesaj", "Patron paneli bu cihazda yapilandirilmamis!");
             return response;
         }
 
         boolean dogru = sifreDogrula(istek.getSifresi());
         response.put("basarili", dogru);
-        response.put("mesaj", dogru ? "Şifre doğrulandı" : "Hatalı şifre!");
+        response.put("mesaj", dogru ? "Sifre dogrulandi" : "Hatali sifre veya sunucuya baglanilamiyor!");
 
         if (!dogru) {
-            auditLogger.logFailedAdminAttempt(
-                    request.getRemoteAddr(), "Patron doğrulama — hatalı şifre");
+            auditLogger.logFailedAdminAttempt(request.getRemoteAddr(), "Patron dogrulama basarisiz");
         }
         return response;
     }
@@ -183,20 +169,19 @@ public class SuperAdminController {
         Map<String, Object> response = new HashMap<>();
 
         if (!yerelErisimMi(request)) {
-            auditLogger.logFailedAdminAttempt(ip, "Uzaktan patron erişimi engellendi");
-            response.put("error", "Bu işlem sadece yerel sistemden yapılabilir.");
+            auditLogger.logFailedAdminAttempt(ip, "Uzaktan patron erisimi engellendi");
+            response.put("error", "Bu islem sadece yerel sistemden yapilabilir.");
             return response;
         }
 
         if (istek.getSifresi() == null || istek.getSifresi().isBlank()) {
-            response.put("error", "Şifre boş olamaz!");
-            auditLogger.logFailedAdminAttempt(ip, "Davetiye üretme — şifre boş");
+            response.put("error", "Sifre bos olamaz!");
             return response;
         }
 
         if (!sifreDogrula(istek.getSifresi())) {
-            response.put("error", "Hatalı şifre!");
-            auditLogger.logFailedAdminAttempt(ip, "Davetiye üretme — hatalı şifre");
+            response.put("error", "Hatali sifre veya sunucuya baglanilamiyor!");
+            auditLogger.logFailedAdminAttempt(ip, "Davetiye uretme — dogrulama basarisiz");
             return response;
         }
 
@@ -207,8 +192,8 @@ public class SuperAdminController {
         davetiyeRepo.save(davetiye);
 
         response.put("kod", yeniKod);
-        response.put("aciklama", "Davetiye başarıyla üretildi!");
-        auditLogger.logSuccessfulAdminAction(ip, "Davetiye üretildi: " + yeniKod);
+        response.put("aciklama", "Davetiye basariyla uretildi!");
+        auditLogger.logSuccessfulAdminAction(ip, "Davetiye uretildi: " + yeniKod);
         return response;
     }
 
@@ -221,16 +206,16 @@ public class SuperAdminController {
 
         if (!yerelErisimMi(request)) {
             auditLogger.logFailedAdminAttempt(ip, "Uzaktan market listeleme engellendi");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erişim!");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erisim!");
         }
 
         if (secret == null || !sifreDogrula(secret)) {
             auditLogger.logFailedAdminAttempt(ip, "Yetkisiz market listeleme denemesi");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erişim!");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erisim!");
         }
 
         List<Market> marketler = marketRepository.findAll();
-        auditLogger.logSuccessfulAdminAction(ip, "Market listesi çekildi");
+        auditLogger.logSuccessfulAdminAction(ip, "Market listesi cekildi");
         return ResponseEntity.ok(marketler);
     }
 
@@ -244,17 +229,17 @@ public class SuperAdminController {
 
         if (!yerelErisimMi(request)) {
             auditLogger.logFailedAdminAttempt(ip, "Uzaktan lisans uzatma engellendi");
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erişim!");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Sadece yerel erisim!");
         }
 
         if (secret == null || !sifreDogrula(secret)) {
             auditLogger.logFailedAdminAttempt(ip, "Yetkisiz lisans uzatma denemesi");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erişim!");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Yetkisiz Erisim!");
         }
 
         Market market = marketRepository.findById(marketId).orElse(null);
         if (market == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Market bulunamadı!");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Market bulunamadi!");
         }
 
         LocalDate mevcutTarih = market.getLisansBitisTarihi() != null
@@ -264,7 +249,7 @@ public class SuperAdminController {
         marketRepository.save(market);
 
         auditLogger.logSuccessfulAdminAction(ip,
-                "Lisans uzatıldı — Market ID: " + marketId + " | Yeni bitiş: " + yeniTarih);
-        return ResponseEntity.ok("Başarılı! Marketin yeni lisans bitiş tarihi: " + yeniTarih);
+                "Lisans uzatildi — Market ID: " + marketId + " | Yeni bitis: " + yeniTarih);
+        return ResponseEntity.ok("Basarili! Marketin yeni lisans bitis tarihi: " + yeniTarih);
     }
 }

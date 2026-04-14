@@ -103,16 +103,16 @@ public class LoginController {
             throw new IllegalArgumentException("Hatalı kullanıcı adı veya şifre!");
         }
 
-        // Hesap devre dışı mı? (soft-delete)
+        // Hesap devre dışı mı? (soft-delete) — enumeration koruması için aynı hata mesajı
         if (!bulunanKullanici.isAktif()) {
-            throw new IllegalArgumentException("Bu hesap devre dışı bırakılmıştır!");
+            throw new IllegalArgumentException("Hatalı kullanıcı adı veya şifre!");
         }
 
         // Lisans sona ermiş mi?
-        java.time.LocalDate bitisTarihi = bulunanKullanici.getMarket().getLisansBitisTarihi();
-        if (bitisTarihi != null && java.time.LocalDate.now().isAfter(bitisTarihi)) {
+        if (bulunanKullanici.getMarket().lisansSuresiDolduMu()) {
             throw new IllegalArgumentException(
-                    "Lisansınız " + bitisTarihi + " tarihinde sona erdi. Yenileme için iletişime geçin.");
+                    "Lisansınız " + bulunanKullanici.getMarket().getLisansBitisTarihi()
+                    + " tarihinde sona erdi. Yenileme için iletişime geçin.");
         }
 
         String token = jwtUtil.tokenOlustur(

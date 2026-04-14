@@ -76,7 +76,8 @@ public class ApiClient {
     }
 
     // GET — Liste döner
-    public static java.util.List getList(String endpoint) throws Exception {
+    @SuppressWarnings("unchecked")
+    public static java.util.List<Map<String, Object>> getList(String endpoint) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + endpoint))
                 .header("Authorization", "Bearer " + jwtToken)
@@ -108,13 +109,7 @@ public class ApiClient {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString());
 
-        // Yanıt string ise Map'e sar
-        String body2 = response.body();
-        if (body2.startsWith("{")) {
-            return mapper.readValue(body2, Map.class);
-        } else {
-            return Map.of("mesaj", body2, "status", response.statusCode());
-        }
+        return yanıtıCoz(response);
     }
 
     // POST — JWT olmadan (giriş/kayıt için)
@@ -130,12 +125,7 @@ public class ApiClient {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString());
 
-        String body2 = response.body();
-        if (body2.startsWith("{")) {
-            return mapper.readValue(body2, Map.class);
-        } else {
-            return Map.of("mesaj", body2, "status", response.statusCode());
-        }
+        return yanıtıCoz(response);
     }
 
     // PUT isteği
@@ -152,12 +142,24 @@ public class ApiClient {
         HttpResponse<String> response = client.send(request,
                 HttpResponse.BodyHandlers.ofString());
 
-        String body2 = response.body();
-        if (body2.startsWith("{")) {
-            return mapper.readValue(body2, Map.class);
-        } else {
-            return Map.of("mesaj", body2, "status", response.statusCode());
+        return yanıtıCoz(response);
+    }
+
+    /**
+     * Yanıt gövdesini Map'e çevirir.
+     * JSON nesnesi ({...}) → doğrudan parse et.
+     * JSON dizisi ([...]) veya düz metin → {"mesaj": body, "status": kod} olarak sar.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> yanıtıCoz(HttpResponse<String> response) throws Exception {
+        String body = response.body();
+        if (body != null && !body.isBlank()) {
+            String trimmed = body.stripLeading();
+            if (trimmed.startsWith("{")) {
+                return mapper.readValue(body, Map.class);
+            }
         }
+        return Map.of("mesaj", body != null ? body : "", "status", response.statusCode());
     }
 
     // DELETE isteği — başarısızsa {"hata":"..."} mesajını exception olarak fırlatır

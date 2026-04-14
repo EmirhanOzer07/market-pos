@@ -28,4 +28,9 @@ public class Market {
     /** Lisansın sona erdiği tarih. Bu tarihten sonra giriş yapılamaz. */
     @Column(nullable = false)
     private LocalDate lisansBitisTarihi;
+
+    /** Lisans süresinin dolup dolmadığını merkezi olarak kontrol eder. */
+    public boolean lisansSuresiDolduMu() {
+        return lisansBitisTarihi != null && lisansBitisTarihi.isBefore(LocalDate.now());
+    }
 }

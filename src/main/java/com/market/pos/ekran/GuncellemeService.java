@@ -49,6 +49,17 @@ public class GuncellemeService {
 
     public record GuncellemeBilgisi(String yeniSurum, String indirmeUrl, String surumNotu) {}
 
+    /** GitHub API çağrıları için paylaşılan istemci. */
+    private static final HttpClient API_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(6))
+            .build();
+
+    /** Yönlendirme desteğiyle dosya indirme istemcisi. */
+    private static final HttpClient INDIR_CLIENT = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.ALWAYS)
+            .connectTimeout(Duration.ofSeconds(15))
+            .build();
+
     // =========================================================
     // Kurulu sürüm yönetimi
     // =========================================================
@@ -78,10 +89,6 @@ public class GuncellemeService {
         try {
             String kurulu = mevcutSurumOku();
 
-            HttpClient client = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(6))
-                    .build();
-
             HttpRequest istek = HttpRequest.newBuilder()
                     .uri(URI.create(GITHUB_API_URL))
                     .header("Accept", "application/vnd.github+json")
@@ -90,7 +97,7 @@ public class GuncellemeService {
                     .GET()
                     .build();
 
-            HttpResponse<String> yanit = client.send(istek, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> yanit = API_CLIENT.send(istek, HttpResponse.BodyHandlers.ofString());
 
             guncellemeyiLogla("GitHub API HTTP " + yanit.statusCode());
             if (yanit.statusCode() != 200) return null;
@@ -138,11 +145,6 @@ public class GuncellemeService {
 
         guncellemeyiLogla("İndirme başlıyor: " + indirmeUrl);
 
-        HttpClient client = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.ALWAYS)
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
-
         // HEAD ile boyut al
         long toplamBoyut = -1;
         try {
@@ -152,7 +154,7 @@ public class GuncellemeService {
                     .header("User-Agent", "MarketPOS/" + mevcutSurumOku())
                     .timeout(Duration.ofSeconds(10))
                     .build();
-            toplamBoyut = client.send(headIstek, HttpResponse.BodyHandlers.discarding())
+            toplamBoyut = INDIR_CLIENT.send(headIstek, HttpResponse.BodyHandlers.discarding())
                     .headers().firstValueAsLong("content-length").orElse(-1);
         } catch (Exception ignored) {}
 
@@ -164,7 +166,7 @@ public class GuncellemeService {
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
-        HttpResponse<InputStream> yanit = client.send(getIstek,
+        HttpResponse<InputStream> yanit = INDIR_CLIENT.send(getIstek,
                 HttpResponse.BodyHandlers.ofInputStream());
 
         if (yanit.statusCode() != 200) {

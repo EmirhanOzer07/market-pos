@@ -7,9 +7,10 @@ import com.market.pos.entity.Market;
 import com.market.pos.repository.KullaniciRepository;
 import com.market.pos.repository.MarketRepository;
 import com.market.pos.security.AuditLogger;
+import com.market.pos.service.KullaniciGuvenlikServisi;
+import com.market.pos.service.KullaniciOnbellekServisi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -30,10 +31,11 @@ public class KullaniciController {
     @Autowired private MarketRepository marketRepository;
     @Autowired private BCryptPasswordEncoder passwordEncoder;
     @Autowired private AuditLogger auditLogger;
+    @Autowired private KullaniciGuvenlikServisi guvenlikServisi;
+    @Autowired private KullaniciOnbellekServisi kullaniciOnbellekServisi;
 
     private Kullanici getAktifKullanici() {
-        String kullaniciAdi = SecurityContextHolder.getContext().getAuthentication().getName();
-        return kullaniciRepository.findByKullaniciAdi(kullaniciAdi);
+        return guvenlikServisi.getAktifKullanici();
     }
 
     @GetMapping("/liste/{marketId}")
@@ -116,6 +118,9 @@ public class KullaniciController {
         // Soft delete — satış geçmişi ve denetim izi korunur
         silinecek.setAktif(false);
         kullaniciRepository.save(silinecek);
+
+        // Önbelleği temizle — sonraki istekte aktif=false görülerek erişim reddedilir
+        kullaniciOnbellekServisi.onbellekTemizle(silinecek.getKullaniciAdi());
 
         auditLogger.logUserDeletion(id, aktif.getKullaniciAdi());
 

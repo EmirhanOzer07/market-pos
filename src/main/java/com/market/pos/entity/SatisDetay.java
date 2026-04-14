@@ -14,7 +14,13 @@ import java.math.BigDecimal;
 @Getter
 @Setter
 @Entity
-@Table(name = "Satis_Detaylari")
+@Table(
+    name = "Satis_Detaylari",
+    indexes = {
+        @Index(name = "idx_detay_satis", columnList = "satis_id"),
+        @Index(name = "idx_detay_urun",  columnList = "urun_id")
+    }
+)
 public class SatisDetay {
 
     @Id

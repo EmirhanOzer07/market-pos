@@ -42,6 +42,10 @@ public class KasaEkrani {
     private final List<String> bulunamayanBarkodlar = new ArrayList<>();
     private Button bulunamayanBtn;
 
+    /** Barkod → ürün bilgisi önbelleği. Her barkod okumada DB/HTTP yerine burası sorgulanır. */
+    private final java.util.concurrent.ConcurrentHashMap<String, Map<String, Object>> urunOnbellegi =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     // hizliUrunler: her eleman [barkod, butonIsmi]
     private final List<String[]> hizliUrunler = new ArrayList<>();
     private FlowPane hizliUrunlerPanel;
@@ -85,6 +89,7 @@ public class KasaEkrani {
     }
 
     public Scene olustur() {
+        urunOnbellegiYukle(); // Arka planda ürün listesini önbelleğe al
         boolean koyu = AyarYoneticisi.isKoyu();
         String sayfaArka  = koyu ? "#111827" : "#eef1f5";
         String panelArka  = koyu ? AyarYoneticisi.formRengi() : "#ffffff";
@@ -468,6 +473,14 @@ public class KasaEkrani {
         hizliUrunleriYukle();
         hizliUrunPaneliniYenile();
 
+        // Ürün önbelleğini 5 dakikada bir arka planda yenile
+        javafx.animation.Timeline onbelekYenile = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(
+                        javafx.util.Duration.minutes(5),
+                        ev -> urunOnbellegiYukle()));
+        onbelekYenile.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        onbelekYenile.play();
+
         Platform.runLater(() -> barkodField.requestFocus());
         return scene;
     }
@@ -499,8 +512,7 @@ public class KasaEkrani {
 
         new Thread(() -> {
             try {
-                Map<String, Object> urun = ApiClient.get(
-                        "/api/urunler/bul/" + ApiClient.getMarketId() + "/" + finalBarkod);
+                Map<String, Object> urun = barkodBul(finalBarkod);
 
                 if (urun != null && urun.containsKey("id")) {
                     Platform.runLater(() -> {
@@ -729,8 +741,7 @@ public class KasaEkrani {
             bulBtn.setText("...");
             new Thread(() -> {
                 try {
-                    Map<String, Object> urun = ApiClient.get(
-                            "/api/urunler/bul/" + ApiClient.getMarketId() + "/" + barkod);
+                    Map<String, Object> urun = barkodBul(barkod);
                     Platform.runLater(() -> {
                         bulBtn.setDisable(false);
                         bulBtn.setText("Ara");
@@ -793,6 +804,11 @@ public class KasaEkrani {
                 try {
                     ApiClient.put("/api/urunler/guncelle/" + id,
                             Map.of("barkod", brk, "isim", isim, "fiyat", f));
+                    // Önbelleği güncelle
+                    Map<String, Object> guncel = new java.util.HashMap<>();
+                    guncel.put("id", id); guncel.put("barkod", brk);
+                    guncel.put("isim", isim); guncel.put("fiyat", f);
+                    urunOnbellegi.put(brk, guncel);
                     Platform.runLater(() -> {
                         urunBilgiLabel.setText("✅  Güncellendi:  " + isim +
                                 "  →  " + String.format("%.2f ₺", f));
@@ -960,8 +976,7 @@ public class KasaEkrani {
     private void hizliUrunuSepeteEkle(String barkod, String butonAdi) {
         new Thread(() -> {
             try {
-                Map<String, Object> urun = ApiClient.get(
-                        "/api/urunler/bul/" + ApiClient.getMarketId() + "/" + barkod);
+                Map<String, Object> urun = barkodBul(barkod);
                 Platform.runLater(() -> {
                     if (urun != null && urun.containsKey("id")) {
                         sepeteEkle(urun, 1.0);
@@ -1083,8 +1098,7 @@ public class KasaEkrani {
             new Thread(() -> {
                 try {
                     // Barkod katalogda var mı kontrol et
-                    Map<String, Object> mevcutUrun = ApiClient.get(
-                            "/api/urunler/bul/" + ApiClient.getMarketId() + "/" + barkod);
+                    Map<String, Object> mevcutUrun = barkodBul(barkod);
                     if (mevcutUrun != null && mevcutUrun.containsKey("id")) {
                         // Mevcut ürün var — kullanıcıya sor
                         Platform.runLater(() -> {
@@ -1126,6 +1140,11 @@ public class KasaEkrani {
                     // Yeni ürün — kataloğa ekle
                     ApiClient.post("/api/urunler/ekle/" + ApiClient.getMarketId(),
                             Map.of("barkod", barkod, "isim", urunAdi, "fiyat", f));
+                    // Önbelleğe ekle (id sunucudan dönmüyor, fiyat double olarak sakla)
+                    Map<String, Object> yeniOnbellek = new java.util.HashMap<>();
+                    yeniOnbellek.put("barkod", barkod); yeniOnbellek.put("isim", urunAdi);
+                    yeniOnbellek.put("fiyat", f);
+                    urunOnbellegi.put(barkod, yeniOnbellek);
                     // Başarılıysa hızlı listeye de ekle
                     Platform.runLater(() -> {
                         hizliUrunler.add(new String[]{barkod, butonIsmi});
@@ -1340,5 +1359,48 @@ public class KasaEkrani {
                 javafx.util.Duration.seconds(5));
         pt.setOnFinished(ev -> { if (popup.isShowing()) popup.close(); });
         pt.play();
+    }
+
+    // ===== ÜRÜN ÖNBELLEĞİ =====
+
+    /**
+     * Tüm ürünleri sunucudan çekip barkod→ürün haritasını doldurur.
+     * Arka plan thread'inde çağrılır; UI thread'ini bloklamaz.
+     */
+    @SuppressWarnings("unchecked")
+    private void urunOnbellegiYukle() {
+        new Thread(() -> {
+            try {
+                java.util.List<Map<String, Object>> liste =
+                        (java.util.List<Map<String, Object>>) ApiClient.getList(
+                                "/api/urunler/liste/" + ApiClient.getMarketId());
+                if (liste != null) {
+                    urunOnbellegi.clear();
+                    for (Map<String, Object> urun : liste) {
+                        if (urun.containsKey("barkod")) {
+                            urunOnbellegi.put(urun.get("barkod").toString(), urun);
+                        }
+                    }
+                    log.debug("[KASA] Ürün önbelleği yüklendi: {} ürün", urunOnbellegi.size());
+                }
+            } catch (Exception e) {
+                log.warn("[KASA] Ürün önbelleği yüklenemedi: {}", e.getMessage());
+            }
+        }, "urun-onbellek").start();
+    }
+
+    /**
+     * Barkoda göre ürün arar: önce yerel önbellek (O(1)), bulamazsa sunucudan çeker.
+     * Sunucudan bulunursa önbelleğe de eklenir.
+     */
+    private Map<String, Object> barkodBul(String barkod) throws Exception {
+        Map<String, Object> onbellekte = urunOnbellegi.get(barkod);
+        if (onbellekte != null) return onbellekte;
+        Map<String, Object> apiden = ApiClient.get(
+                "/api/urunler/bul/" + ApiClient.getMarketId() + "/" + barkod);
+        if (apiden != null && apiden.containsKey("id")) {
+            urunOnbellegi.put(barkod, apiden);
+        }
+        return apiden;
     }
 }

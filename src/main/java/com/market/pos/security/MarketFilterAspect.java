@@ -1,7 +1,7 @@
 package com.market.pos.security;
 
-import com.market.pos.entity.Kullanici;
-import com.market.pos.repository.KullaniciRepository;
+import com.market.pos.service.KullaniciOnbellekServisi;
+import com.market.pos.service.KullaniciOnbellekServisi.MarketBilgisi;
 import jakarta.persistence.EntityManager;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
@@ -19,6 +19,9 @@ import java.time.LocalDate;
  * <p>Her repository çağrısından önce aktif kullanıcının market ID'sini Hibernate oturumuna
  * yerleştirir; böylece tüm sorgular otomatik olarak ilgili markete ait verilerle sınırlanır.
  * Tekrarlı çalışmayı önlemek için {@link ThreadLocal} kullanılır.</p>
+ *
+ * <p>Kullanici bilgisi {@link KullaniciOnbellekServisi} üzerinden Caffeine önbelleğinden alınır;
+ * aynı kullanıcı için 30 sn içinde veritabanına gidilmez.</p>
  */
 @Aspect
 @Component
@@ -28,7 +31,7 @@ public class MarketFilterAspect {
     private EntityManager entityManager;
 
     @Autowired
-    private KullaniciRepository kullaniciRepository;
+    private KullaniciOnbellekServisi kullaniciOnbellekServisi;
 
     /**
      * Aynı request içinde filtrenin birden fazla çalışmasını önleyen ThreadLocal bayrağı.
@@ -38,7 +41,6 @@ public class MarketFilterAspect {
     @Before("execution(* com.market.pos.repository.*.*(..)) && " +
             "!execution(* com.market.pos.repository.KullaniciRepository.findByKullaniciAdi(..)) && " +
             "!execution(* com.market.pos.repository.KullaniciRepository.findByKullaniciAdiWithMarket(..))")
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public void marketFiltresiniAktifEt() {
 
         if (filtreAktif.get()) {
@@ -49,18 +51,23 @@ public class MarketFilterAspect {
 
         if (auth != null && auth.isAuthenticated() && !auth.getName().equals("anonymousUser")) {
 
-            Kullanici aktifKullanici = kullaniciRepository.findByKullaniciAdiWithMarket(auth.getName());
+            // Önbellekten alınan basit kayıt — Hibernate session bağımlılığı yok
+            MarketBilgisi bilgi = kullaniciOnbellekServisi.marketBilgisiniGetir(auth.getName());
 
-            if (aktifKullanici != null && aktifKullanici.getMarket() != null) {
+            if (bilgi != null) {
 
-                if (aktifKullanici.getMarket().getLisansBitisTarihi() != null &&
-                        aktifKullanici.getMarket().getLisansBitisTarihi().isBefore(LocalDate.now())) {
+                if (!bilgi.aktif()) {
+                    throw new SecurityException("Hesabınız devre dışı bırakılmıştır!");
+                }
+
+                if (bilgi.lisansBitisTarihi() != null &&
+                        bilgi.lisansBitisTarihi().isBefore(LocalDate.now())) {
                     throw new SecurityException("Lisans süreniz dolduğu için işlem yapamazsınız!");
                 }
 
                 Session session = entityManager.unwrap(Session.class);
                 session.enableFilter("marketFilter")
-                        .setParameter("marketId", aktifKullanici.getMarket().getId());
+                        .setParameter("marketId", bilgi.marketId());
 
                 filtreAktif.set(true);
             }

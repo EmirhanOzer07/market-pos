@@ -1,5 +1,8 @@
 package com.market.pos.ekran;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.Properties;
@@ -10,6 +13,8 @@ import java.util.Properties;
  * Tüm metodlar thread-safe (volatile + synchronized kaydet).
  */
 public class AyarYoneticisi {
+
+    private static final Logger log = LoggerFactory.getLogger(AyarYoneticisi.class);
 
     private static final Path CONFIG_YOLU = Paths.get(
             System.getProperty("user.home"), "AppData", "Local", "MarketPOS", "config.properties");
@@ -26,12 +31,12 @@ public class AyarYoneticisi {
     public static boolean isKoyu()    { return koyu; }
     public static boolean isSesAcik() { return sesAcik; }
 
-    public static void temaToggle() {
+    public static synchronized void temaToggle() {
         koyu = !koyu;
         kaydet();
     }
 
-    public static void sesToggle() {
+    public static synchronized void sesToggle() {
         sesAcik = !sesAcik;
         kaydet();
     }
@@ -78,7 +83,9 @@ public class AyarYoneticisi {
                     props.load(is);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.warn("[AYAR] Config okunamadı: {}", e.getMessage());
+        }
         return props;
     }
 
@@ -90,7 +97,9 @@ public class AyarYoneticisi {
             try (OutputStream os = new FileOutputStream(CONFIG_YOLU.toFile())) {
                 props.store(os, "Market POS - Uygulama Yapilandirmasi");
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.warn("[AYAR] Config kaydedilemedi: {}", e.getMessage());
+        }
     }
 
     // =========================================================

@@ -136,11 +136,8 @@ public class YonetimEkrani {
                 case "İsim Z→A"   -> aktifSiralama = java.util.Comparator
                         .<Map<String, Object>, String>comparing(u -> u.get("isim").toString().toLowerCase())
                         .reversed();
-                case "Barkod A→Z" -> aktifSiralama = java.util.Comparator.comparing(
-                        u -> u.get("barkod").toString());
-                case "Barkod Z→A" -> aktifSiralama = java.util.Comparator
-                        .<Map<String, Object>, String>comparing(u -> u.get("barkod").toString())
-                        .reversed();
+                case "Barkod A→Z" -> aktifSiralama = (a, b) -> barkodKarsilastir(a, b);
+                case "Barkod Z→A" -> aktifSiralama = (a, b) -> barkodKarsilastir(b, a);
                 case "Fiyat ↑"    -> aktifSiralama = java.util.Comparator.comparingDouble(
                         u -> ((Number) u.get("fiyat")).doubleValue());
                 case "Fiyat ↓"    -> aktifSiralama = java.util.Comparator
@@ -342,6 +339,17 @@ public class YonetimEkrani {
         VBox.setVgrow(tablo, Priority.ALWAYS);
         urunleriYukle(urunVerisi, tablo, urunSayisiLabel);
         return panel;
+    }
+
+    /** Barkodları sayısal önce, sayısal değilse alfabetik sıralar. */
+    private int barkodKarsilastir(Map<String, Object> a, Map<String, Object> b) {
+        String ba = a.get("barkod").toString();
+        String bb = b.get("barkod").toString();
+        try {
+            return Long.compare(Long.parseLong(ba), Long.parseLong(bb));
+        } catch (NumberFormatException e) {
+            return ba.compareTo(bb);
+        }
     }
 
     private void aramayaGoreFiltrele(String aranan,

@@ -7,11 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * JWT token üretimi ve doğrulaması için yardımcı sınıf.
@@ -22,16 +20,14 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    
     @Value("${jwt.secret}")
     private String gizliMetin;
 
     @Value("${jwt.expiration}")
     private long expirationTime;
 
-    private Key secretKey;
+    private SecretKey secretKey;
 
-    // @PostConstruct: Spring bean başlatıldıktan sonra JWT imzalama anahtarını hazırla
     @PostConstruct
     public void init() {
         this.secretKey = Keys.hmacShaKeyFor(gizliMetin.getBytes(StandardCharsets.UTF_8));
@@ -39,26 +35,23 @@ public class JwtUtil {
 
     // Token oluştur
     public String tokenOlustur(String kullaniciAdi, String rol, Long marketId) {
-        Map<String, Object> extraBilgiler = new HashMap<>();
-        extraBilgiler.put("rol", rol);
-        extraBilgiler.put("marketId", marketId);
-
         return Jwts.builder()
-                .setClaims(extraBilgiler)
-                .setSubject(kullaniciAdi)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+                .subject(kullaniciAdi)
+                .claim("rol", rol)
+                .claim("marketId", marketId)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(secretKey)
                 .compact();
     }
 
     // Token içini oku
     public Claims tokenCoz(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(secretKey)
+        return Jwts.parser()
+                .verifyWith(secretKey)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     // Token geçerli mi?

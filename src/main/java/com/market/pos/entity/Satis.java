@@ -1,12 +1,7 @@
 package com.market.pos.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+
 import lombok.Getter;
 import lombok.Setter;
 import java.math.BigDecimal;
@@ -21,7 +16,13 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Entity
-@Table(name = "Satislar")
+@Table(
+    name = "Satislar",
+    indexes = {
+        @Index(name = "idx_satis_market_tarih", columnList = "market_id, tarih"),
+        @Index(name = "idx_satis_kullanici",    columnList = "kullanici_id")
+    }
+)
 public class Satis {
 
     @Id

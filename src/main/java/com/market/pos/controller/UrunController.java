@@ -2,6 +2,7 @@ package com.market.pos.controller;
 
 import java.util.HashMap;
 import com.market.pos.service.YedekService;
+import com.market.pos.service.KullaniciGuvenlikServisi;
 import com.market.pos.entity.Urun;
 import com.market.pos.entity.Market;
 import com.market.pos.entity.Kullanici;
@@ -10,7 +11,6 @@ import com.market.pos.repository.MarketRepository;
 import com.market.pos.repository.KullaniciRepository;
 import com.market.pos.repository.SatisDetayRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.Valid;
@@ -44,19 +44,17 @@ public class UrunController {
     @Autowired private KullaniciRepository kullaniciRepository;
     @Autowired private SatisDetayRepository satisDetayRepository;
     @Autowired private CacheManager cacheManager;
+    @Autowired private KullaniciGuvenlikServisi guvenlikServisi;
 
     private static final int MAX_SATIR = 10_000;
     private static final long MAX_DOSYA_BOYUTU = 5L * 1024 * 1024; // 5 MB
 
     private Kullanici getAktifKullanici() {
-        String kullaniciAdi = SecurityContextHolder.getContext().getAuthentication().getName();
-        return kullaniciRepository.findByKullaniciAdi(kullaniciAdi);
+        return guvenlikServisi.getAktifKullanici();
     }
 
     private void marketYetkiKontrolu(Long talepEdilenMarketId) {
-        if (!getAktifKullanici().getMarket().getId().equals(talepEdilenMarketId)) {
-            throw new SecurityException("Yetkisiz Market Erişimi!");
-        }
+        guvenlikServisi.marketYetkiKontrolu(talepEdilenMarketId);
     }
 
     // Ürün listesi 30 saniye cache'de tutulur (application.properties: caffeine spec)
@@ -128,9 +126,11 @@ public class UrunController {
 
         Market market = marketRepository.findById(marketId).orElseThrow();
 
-        Map<String, Urun> mevcutUrunHaritasi = urunRepository.findByMarketId(marketId)
-                .stream()
-                .collect(Collectors.toMap(Urun::getBarkod, u -> u));
+        // Projeksiyon — sadece çakışma tespiti için gerekli alanlar yüklenir (id, barkod, isim, fiyat)
+        Map<String, UrunRepository.UrunCakismaProje> mevcutUrunHaritasi =
+                urunRepository.findCakismaProjeByMarketId(marketId)
+                        .stream()
+                        .collect(Collectors.toMap(UrunRepository.UrunCakismaProje::getBarkod, u -> u));
 
         Map<String, Urun> sonucHaritasi = new HashMap<>();
 
@@ -199,48 +199,45 @@ public class UrunController {
                         continue;
                     }
 
-                    Urun urun;
-
                     if (cakismaBarkodelari.contains(barkod)) {
                         // Bu barkod çakışmalı — atla
                         continue;
                     } else if (sonucHaritasi.containsKey(barkod)) {
                         // Aynı CSV'de tekrar geçen barkod — son değeri kullan
-                        urun = sonucHaritasi.get(barkod);
-                        urun.setIsim(isim);
-                        urun.setFiyat(fiyat);
-                        continue; // sonucHaritasi'nda zaten var, tekrar put etme
+                        Urun tekrar = sonucHaritasi.get(barkod);
+                        tekrar.setIsim(isim);
+                        tekrar.setFiyat(fiyat);
+                        continue;
                     } else if (mevcutUrunHaritasi.containsKey(barkod)) {
-                        urun = mevcutUrunHaritasi.get(barkod);
-                        boolean ayniIsim  = isim.equals(urun.getIsim());
-                        boolean ayniFiyat = fiyat.compareTo(urun.getFiyat()) == 0;
+                        UrunRepository.UrunCakismaProje mevcut = mevcutUrunHaritasi.get(barkod);
+                        boolean ayniIsim  = isim.equals(mevcut.getIsim());
+                        boolean ayniFiyat = fiyat.compareTo(mevcut.getFiyat()) == 0;
 
                         if (ayniIsim && ayniFiyat) {
-                            // Birebir aynı → atla, hiçbir şey yapma
+                            // Birebir aynı → atla
                             continue;
                         } else {
-                            // Farklı → çakışma olarak kaydet, frontend soracak
+                            // Farklı → çakışma, frontend soracak
                             Map<String, Object> c = new HashMap<>();
-                            c.put("id",       urun.getId());
+                            c.put("id",       mevcut.getId());
                             c.put("barkod",   barkod);
-                            c.put("dbIsim",   urun.getIsim());
-                            c.put("dbFiyat",  urun.getFiyat());
+                            c.put("dbIsim",   mevcut.getIsim());
+                            c.put("dbFiyat",  mevcut.getFiyat());
                             c.put("csvIsim",  isim);
                             c.put("csvFiyat", fiyat);
                             cakismalar.add(c);
                             cakismaBarkodelari.add(barkod);
-                            continue; // Güncelleme yok — kullanıcı karar verecek
+                            continue;
                         }
                     } else {
-                        urun = new Urun();
-                        urun.setBarkod(barkod);
-                        urun.setIsim(isim);
-                        urun.setFiyat(fiyat);
-                        urun.setMarket(market);
+                        Urun yeni = new Urun();
+                        yeni.setBarkod(barkod);
+                        yeni.setIsim(isim);
+                        yeni.setFiyat(fiyat);
+                        yeni.setMarket(market);
                         eklenenCount++;
+                        sonucHaritasi.put(barkod, yeni);
                     }
-
-                    sonucHaritasi.put(barkod, urun);
 
                 } catch (Exception e) {
                     hatalar.add("Satır " + satirNo + ": Beklenmeyen hata -> " + e.getMessage());

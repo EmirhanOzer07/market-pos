@@ -42,6 +42,32 @@ public class ExcelYedekService {
     @Autowired private MarketRepository marketRepository;
 
     // ─────────────────────────────────────────────
+    // Başlangıç kontrolü — bugün Excel yedeği yoksa al
+    // ─────────────────────────────────────────────
+    @jakarta.annotation.PostConstruct
+    public void baslangiçExcelYedegi() {
+        new Thread(() -> {
+            try { Thread.sleep(10000); } catch (InterruptedException ignored) {} // Spring tam ayağa kalksın
+            String bugun = java.time.LocalDate.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            Path klasor = klasorYolu();
+            File[] bugunYedekleri = klasor.toFile().listFiles(
+                    f -> f.getName().startsWith("urunler_" + bugun) && f.getName().endsWith(".xlsx"));
+            if (bugunYedekleri == null || bugunYedekleri.length == 0) {
+                log.info("[EXCEL YEDEK] Bugün için Excel yedeği yok, alınıyor...");
+                try {
+                    Path hedef = excelYedekAl();
+                    log.info("[EXCEL YEDEK] ✓ Başlangıç yedeği alındı: {}", hedef.getFileName());
+                } catch (Exception e) {
+                    log.warn("[EXCEL YEDEK] Başlangıç yedeği alınamadı: {}", e.getMessage());
+                }
+            } else {
+                log.info("[EXCEL YEDEK] Bugün için Excel yedeği mevcut: {}", bugunYedekleri[0].getName());
+            }
+        }).start();
+    }
+
+    // ─────────────────────────────────────────────
     // Zamanlayıcı — her gece 23:59
     // ─────────────────────────────────────────────
     @Scheduled(cron = "0 59 23 * * *")

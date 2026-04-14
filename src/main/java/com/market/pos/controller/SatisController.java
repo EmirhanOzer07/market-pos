@@ -5,8 +5,9 @@ import com.market.pos.repository.*;
 import com.market.pos.dto.SatisIstegi;
 import com.market.pos.dto.SepetUrunDTO;
 import com.market.pos.security.AuditLogger;
+import com.market.pos.service.KullaniciGuvenlikServisi;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.cache.CacheManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.market.pos.service.YedekService;
@@ -24,16 +25,14 @@ import java.util.*;
 public class SatisController {
     @Autowired private YedekService yedekService;
     @Autowired private AuditLogger auditLogger;
+    @Autowired private CacheManager cacheManager;
     @Autowired private SatisRepository satisRepository;
     @Autowired private SatisDetayRepository satisDetayRepository;
-    @Autowired private MarketRepository marketRepository;
-    @Autowired private KullaniciRepository kullaniciRepository;
     @Autowired private UrunRepository urunRepository;
+    @Autowired private KullaniciGuvenlikServisi guvenlikServisi;
 
     private Kullanici getAktifKullanici() {
-        String kullaniciAdi = (String) SecurityContextHolder
-                .getContext().getAuthentication().getPrincipal();
-        return kullaniciRepository.findByKullaniciAdi(kullaniciAdi);
+        return guvenlikServisi.getAktifKullanici();
     }
 
     @PostMapping("/tamamla")
@@ -52,8 +51,7 @@ public class SatisController {
         Market market = kasiyer.getMarket();
 
         // Lisans süresi dolan markette satış yapılamaz
-        if (market.getLisansBitisTarihi() != null &&
-                market.getLisansBitisTarihi().isBefore(java.time.LocalDate.now())) {
+        if (market.lisansSuresiDolduMu()) {
             throw new IllegalArgumentException(
                     "Market lisansı " + market.getLisansBitisTarihi() +
                     " tarihinde sona erdi. Satış yapılamaz!");
@@ -66,29 +64,31 @@ public class SatisController {
                     "Geçersiz ödeme tipi: '" + odemeTipi + "'. Sadece NAKIT veya KART kabul edilir.");
         }
 
-        // Tek döngüde doğrulama ve toplam hesaplama — tutarlılık garantisi
+        // Adet ön kontrolü
+        for (SepetUrunDTO item : istek.getSepet()) {
+            if (item.getAdet() == null || item.getAdet() <= 0) {
+                throw new IllegalArgumentException("Geçersiz adet değeri!");
+            }
+        }
+
+        // Tüm barkodları tek sorguda çek — N+1 önlemi
+        List<String> barkodlar = istek.getSepet().stream()
+                .map(SepetUrunDTO::getBarkod).collect(java.util.stream.Collectors.toList());
+        Map<String, Urun> barkodUrunHaritasi = urunRepository
+                .findByBarkodInAndMarketId(barkodlar, market.getId())
+                .stream().collect(java.util.stream.Collectors.toMap(Urun::getBarkod, u -> u));
+
+        // Doğrulama ve toplam hesaplama
         BigDecimal toplamTutar = BigDecimal.ZERO;
         List<Urun> dogrulanmisUrunler = new ArrayList<>();
         List<Double> adetler = new ArrayList<>();
 
         for (SepetUrunDTO item : istek.getSepet()) {
-
-            // Adet kontrolü
-            if (item.getAdet() == null || item.getAdet() <= 0) {
-                throw new IllegalArgumentException("Geçersiz adet değeri!");
-            }
-
-            // Ürün bu markete ait mi? (barkod üzerinden güvenli doğrulama)
-            Urun gercekUrun = urunRepository.findByBarkodAndMarketId(
-                    item.getBarkod(), market.getId()
-            );
+            Urun gercekUrun = barkodUrunHaritasi.get(item.getBarkod());
             if (gercekUrun == null) {
                 throw new IllegalArgumentException("Ürün bu markette bulunamadı: " + item.getBarkod());
             }
-
-            BigDecimal adet = BigDecimal.valueOf(item.getAdet());
-            toplamTutar = toplamTutar.add(gercekUrun.getFiyat().multiply(adet));
-
+            toplamTutar = toplamTutar.add(gercekUrun.getFiyat().multiply(BigDecimal.valueOf(item.getAdet())));
             dogrulanmisUrunler.add(gercekUrun);
             adetler.add(item.getAdet());
         }
@@ -102,7 +102,8 @@ public class SatisController {
 
         Satis kaydedilenSatis = satisRepository.save(yeniSatis);
 
-        // Detayları kaydet — doğrulanmış listeden, tutarsızlık yok
+        // Detayları toplu kaydet — saveAll() ile tek batch INSERT
+        List<SatisDetay> detaylar = new ArrayList<>();
         for (int i = 0; i < dogrulanmisUrunler.size(); i++) {
             Urun urun = dogrulanmisUrunler.get(i);
             SatisDetay detay = new SatisDetay();
@@ -110,8 +111,9 @@ public class SatisController {
             detay.setUrun(urun);
             detay.setAdet(adetler.get(i));
             detay.setSatilanFiyat(urun.getFiyat());
-            satisDetayRepository.save(detay);
+            detaylar.add(detay);
         }
+        satisDetayRepository.saveAll(detaylar);
 
         auditLogger.logSalesTransaction(
                 kaydedilenSatis.getId(),
@@ -119,6 +121,10 @@ public class SatisController {
                 kaydedilenSatis.getToplamTutar()
         );
         yedekService.yedekAl("satis");
+
+        // Satış özeti cache'ini geçersiz kıl — sonraki ozet isteği güncel veriyi çeker
+        org.springframework.cache.Cache ozetCache = cacheManager.getCache("satisOzeti");
+        if (ozetCache != null) ozetCache.evict(market.getId());
 
         Map<String, Object> yanit = new HashMap<>();
         yanit.put("mesaj", "Başarılı");
@@ -132,61 +138,63 @@ public class SatisController {
             @org.springframework.web.bind.annotation.RequestParam String baslangic,
             @org.springframework.web.bind.annotation.RequestParam String bitis) {
 
-        Kullanici gercekKullanici = getAktifKullanici();
-        if (!gercekKullanici.getMarket().getId().equals(marketId)) {
-            throw new SecurityException("Başka marketin verisine erişemezsiniz!");
-        }
+        guvenlikServisi.marketYetkiKontrolu(marketId);
 
+        java.time.LocalDateTime bas;
+        java.time.LocalDateTime bit;
         try {
             java.time.LocalDate basLd = java.time.LocalDate.parse(baslangic);
             java.time.LocalDate bitLd = java.time.LocalDate.parse(bitis);
-
             if (basLd.isAfter(bitLd)) {
                 throw new IllegalArgumentException("Başlangıç tarihi bitiş tarihinden sonra olamaz!");
             }
-            java.time.LocalDateTime bas = basLd.atStartOfDay();
-            java.time.LocalDateTime bit = bitLd.atTime(23, 59, 59);
-
-            Map<String, Object> yanit = new HashMap<>();
-            BigDecimal toplam = satisRepository.toplamCiroAralik(marketId, bas, bit);
-            BigDecimal nakit  = satisRepository.nakitAralik(marketId, bas, bit);
-            BigDecimal kart   = satisRepository.kartAralik(marketId, bas, bit);
-            Long sayi         = satisRepository.sayiAralik(marketId, bas, bit);
-
-            yanit.put("toplamCiro",  toplam != null ? toplam : BigDecimal.ZERO);
-            yanit.put("nakitCiro",   nakit  != null ? nakit  : BigDecimal.ZERO);
-            yanit.put("kartCiro",    kart   != null ? kart   : BigDecimal.ZERO);
-            yanit.put("satisSayisi", sayi   != null ? sayi   : 0L);
-            yanit.put("baslangic",   baslangic);
-            yanit.put("bitis",       bitis);
-            return yanit;
+            bas = basLd.atStartOfDay();
+            bit = bitLd.atTime(23, 59, 59);
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
             throw new IllegalArgumentException("Geçersiz tarih formatı. YYYY-MM-DD kullanın.");
         }
+
+        BigDecimal toplam = satisRepository.toplamCiroAralik(marketId, bas, bit);
+        BigDecimal nakit  = satisRepository.nakitAralik(marketId, bas, bit);
+        BigDecimal kart   = satisRepository.kartAralik(marketId, bas, bit);
+        Long sayi         = satisRepository.sayiAralik(marketId, bas, bit);
+
+        Map<String, Object> yanit = new HashMap<>();
+        yanit.put("toplamCiro",  toplam != null ? toplam : BigDecimal.ZERO);
+        yanit.put("nakitCiro",   nakit  != null ? nakit  : BigDecimal.ZERO);
+        yanit.put("kartCiro",    kart   != null ? kart   : BigDecimal.ZERO);
+        yanit.put("satisSayisi", sayi   != null ? sayi   : 0L);
+        yanit.put("baslangic",   baslangic);
+        yanit.put("bitis",       bitis);
+        return yanit;
     }
 
     @GetMapping("/ozet/{marketId}")
+    @SuppressWarnings("unchecked")
     public Map<String, Object> satisOzeti(@PathVariable Long marketId) {
+        // Güvenlik kontrolü her zaman çalışır — cache proxy'sinin dışında
+        guvenlikServisi.marketYetkiKontrolu(marketId);
 
-        Kullanici gercekKullanici = getAktifKullanici();
-        if (!gercekKullanici.getMarket().getId().equals(marketId)) {
-            throw new SecurityException("Başka marketin verisine erişemezsiniz!");
+        // Manuel cache: self-invocation sorunundan kaçınmak için @Cacheable yerine
+        org.springframework.cache.Cache cache = cacheManager.getCache("satisOzeti");
+        if (cache != null) {
+            org.springframework.cache.Cache.ValueWrapper sarili = cache.get(marketId);
+            if (sarili != null) return (Map<String, Object>) sarili.get();
         }
 
         Map<String, Object> yanit = new HashMap<>();
-
         BigDecimal toplam = satisRepository.toplamCiroHesapla(marketId);
         yanit.put("toplamCiro", toplam != null ? toplam : BigDecimal.ZERO);
-
         BigDecimal nakit = satisRepository.nakitToplamHesapla(marketId);
         yanit.put("nakitCiro", nakit != null ? nakit : BigDecimal.ZERO);
-
         BigDecimal kart = satisRepository.kartToplamHesapla(marketId);
         yanit.put("kartCiro", kart != null ? kart : BigDecimal.ZERO);
-
         Long sayisi = satisRepository.satisSayisiGetir(marketId);
         yanit.put("satisSayisi", sayisi != null ? sayisi : 0L);
 
+        if (cache != null) cache.put(marketId, yanit);
         return yanit;
     }
 }
