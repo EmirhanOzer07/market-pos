@@ -105,6 +105,29 @@ public class YedekService {
     }
 
     /**
+     * Her ayın 1'i gece 03:00'da H2 veritabanı bakımı.
+     *
+     * <p>Uzun süreli kullanımda H2 dosyası silinmiş/güncellenen satırlardan
+     * boş alan biriktirir. CHECKPOINT DEFRAG bu alanı geri kazanır ve
+     * sorgu performansını korur. Yıllarca kesintisiz çalışan market
+     * kurulumları için kritiktir.</p>
+     */
+    @Scheduled(cron = "0 0 3 1 * *")
+    public void aylikVtBakimi() {
+        if (!yedekKilidi.tryLock()) return;
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement()) {
+            log.info("[BAKIM] Aylık H2 CHECKPOINT başlıyor...");
+            stmt.execute("CHECKPOINT DEFRAG");
+            log.info("[BAKIM] H2 CHECKPOINT tamamlandı.");
+        } catch (Exception e) {
+            log.warn("[BAKIM] H2 CHECKPOINT başarısız: {}", e.getMessage());
+        } finally {
+            yedekKilidi.unlock();
+        }
+    }
+
+    /**
      * Günlük yedek — GUNLUK_KLASORU içine yazar.
      */
     private void gunlukYedekAl() {

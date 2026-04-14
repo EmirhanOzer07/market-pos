@@ -236,7 +236,7 @@ public class GirisEkrani {
                 kayitOlBtn,
                 hataMesaji
         );
-        form.setPadding(new Insets(32, 40, 40, 40));
+        form.setPadding(new Insets(24, 36, 32, 36));
         form.setMaxWidth(380);
         form.setStyle(
                 "-fx-background-color: " + formRenk + "; -fx-background-radius: 12; " +
@@ -245,14 +245,14 @@ public class GirisEkrani {
         // ===== ANA LAYOUT =====
         StackPane anaLayout = new StackPane(form);
         anaLayout.setStyle("-fx-background-color: " + arkaRenk + ";");
-        anaLayout.setPadding(new Insets(60));
+        anaLayout.setPadding(new Insets(30));
 
         // ===== OLAYLAR =====
         girisBtn.setOnAction(e -> girisYap());
         sifreField.setOnAction(e -> girisYap()); // Enter ile giriş
         kullaniciAdiField.setOnAction(e -> sifreField.requestFocus());
 
-        Scene scene = new Scene(anaLayout, 500, 420);
+        Scene scene = new Scene(anaLayout, 500, 560);
 
         // Ctrl+Shift+P ile gizli patron paneline erişim
         scene.setOnKeyPressed(e -> {

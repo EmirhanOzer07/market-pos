@@ -64,9 +64,9 @@ public class PosApplication extends Application {
 
         stage.setTitle("OZR POS");
         stage.setMinWidth(500);
-        stage.setMinHeight(400);
+        stage.setMinHeight(560);
         stage.setWidth(500);
-        stage.setHeight(400);
+        stage.setHeight(560);
         stage.centerOnScreen();
 
         // Yükleniyor ekranını hemen göster

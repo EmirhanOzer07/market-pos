@@ -653,15 +653,16 @@ public class YonetimEkrani {
                             ).append(" ürün\n");
                             if (!cakismalar.isEmpty())
                                 icerik.append("⚠  Çakışma: ").append(cakismalar.size()).append(" ürün (sorulacak)\n");
+                            // Hata detayları — tümü expandable panel'de
+                            StringBuilder hataDetay = new StringBuilder();
                             if (hataSayisi > 0) {
-                                icerik.append("❌  Hatalı satır: ").append(hataSayisi).append("\n");
+                                icerik.append("❌  Hatalı satır: ").append(hataSayisi)
+                                      .append(" (aşağıda detay)\n");
                                 Object hatalarObj = sonuc.get("hatalar");
                                 if (hatalarObj instanceof List<?> hataList) {
-                                    int goster = Math.min(hataList.size(), 5);
-                                    for (int i = 0; i < goster; i++)
-                                        icerik.append("  • ").append(hataList.get(i)).append("\n");
-                                    if (hataList.size() > 5)
-                                        icerik.append("  ... ve ").append(hataList.size()-5).append(" hata daha.");
+                                    for (int i = 0; i < hataList.size(); i++)
+                                        hataDetay.append(i + 1).append(". ")
+                                                 .append(hataList.get(i)).append("\n");
                                 }
                             }
 
@@ -670,8 +671,18 @@ public class YonetimEkrani {
                             sonucAlert.setTitle("Dosya Yükleme Sonucu");
                             sonucAlert.setHeaderText("✅  " + dosyaAdi + " işlendi!");
                             sonucAlert.setContentText(icerik.toString());
-                            sonucAlert.getDialogPane().setPrefWidth(440);
-                            sonucAlert.showAndWait(); // ← Öne çıkar, kapanana kadar bekle
+                            sonucAlert.getDialogPane().setPrefWidth(460);
+                            // Hata varsa expandable detay ekle
+                            if (hataDetay.length() > 0) {
+                                javafx.scene.control.TextArea hataAlani =
+                                        new javafx.scene.control.TextArea(hataDetay.toString());
+                                hataAlani.setEditable(false);
+                                hataAlani.setWrapText(true);
+                                hataAlani.setPrefHeight(180);
+                                sonucAlert.getDialogPane().setExpandableContent(hataAlani);
+                                sonucAlert.getDialogPane().setExpanded(true);
+                            }
+                            sonucAlert.showAndWait();
 
                             urunleriYukle(veri, tablo, new Label());
 
@@ -736,13 +747,19 @@ public class YonetimEkrani {
         );
         alert.getDialogPane().setPrefWidth(420);
 
-        ButtonType csvBtn = new ButtonType("CSV'den Gelen", ButtonBar.ButtonData.YES);
-        ButtonType dbBtn  = new ButtonType("Sistemdekini Tut", ButtonBar.ButtonData.NO);
-        alert.getButtonTypes().setAll(csvBtn, dbBtn);
+        ButtonType csvBtn      = new ButtonType("CSV'den Gelen", ButtonBar.ButtonData.YES);
+        ButtonType dbBtn       = new ButtonType("Sistemdekini Tut", ButtonBar.ButtonData.NO);
+        ButtonType tumunuAtla  = new ButtonType("Kalanları Atla", ButtonBar.ButtonData.CANCEL_CLOSE);
+        alert.getButtonTypes().setAll(csvBtn, dbBtn, tumunuAtla);
 
         Optional<ButtonType> secim = alert.showAndWait();
 
-        if (secim.isPresent() && secim.get() == csvBtn) {
+        if (!secim.isPresent() || secim.get() == tumunuAtla) {
+            // X veya "Kalanları Atla" → tüm kalan çakışmaları sistemde tut
+            urunleriYukle(veri, tablo, new Label());
+            bildir("Kalan " + (cakismalar.size() - index) +
+                   " çakışma atlandı — sistem verileri korundu.", "#e67e22");
+        } else if (secim.get() == csvBtn) {
             // CSV'den gelen değeri uygula
             new Thread(() -> {
                 try {
@@ -754,7 +771,7 @@ public class YonetimEkrani {
                 Platform.runLater(() -> cakismayiCoz(cakismalar, index + 1, veri, tablo));
             }).start();
         } else {
-            // Sistemdekini tut — bir sonrakine geç
+            // "Sistemdekini Tut" — bir sonrakine geç
             cakismayiCoz(cakismalar, index + 1, veri, tablo);
         }
     }

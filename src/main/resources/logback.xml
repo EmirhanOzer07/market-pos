@@ -28,6 +28,24 @@
         <appender-ref ref="AUDIT_FILE"/>
     </logger>
 
+    <!-- Uygulama genel log dosyası — hata takibi için AppData'ya yaz -->
+    <appender name="APP_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${user.home}/AppData/Local/MarketPOS/app.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${user.home}/AppData/Local/MarketPOS/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>30</maxHistory>      <!-- 30 günden eskisini sil -->
+            <maxFileSize>5MB</maxFileSize>   <!-- 5MB'ı geçince yeni dosya -->
+            <totalSizeCap>50MB</totalSizeCap> <!-- Toplam max 50MB -->
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <!-- Sadece WARN ve üzeri logları dosyaya yaz — disk tasarrufu -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+    </appender>
+
     <!-- Spring ve Hibernate logları sadece konsola, INFO seviyesi -->
     <logger name="org.springframework" level="WARN"/>
     <logger name="org.hibernate" level="WARN"/>
@@ -36,6 +54,7 @@
     <!-- Uygulama logları -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="APP_FILE"/>
     </root>
 
 </configuration>

@@ -164,7 +164,7 @@ public class UrunController {
                 if (satir.trim().isEmpty()) continue;
 
                 try {
-                    String[] s = satir.split("[,;]");
+                    String[] s = csvSatirParcala(satir);
                     if (s.length < 3) {
                         hatalar.add("Satır " + satirNo + ": Eksik sütun (Barkod;İsim;Fiyat bekleniyor)");
                         continue;
@@ -303,6 +303,40 @@ public class UrunController {
         urunRepository.save(mevcutUrun);
         urunCacheTemizle(marketId);
         return "Güncellendi";
+    }
+
+    /**
+     * CSV satırını doğru biçimde parçalar.
+     *
+     * <p>Ayırıcı tespiti: satırda ";" varsa noktalı virgül, yoksa virgül kullanılır.
+     * Tırnak içindeki ayırıcılar (örn. "1,5l Fanta") alan sınırı sayılmaz.</p>
+     *
+     * <p>Örnekler:</p>
+     * <pre>
+     *   12345;1,5l Fanta;5,99   → ["12345", "1,5l Fanta", "5,99"]
+     *   12345,"1,5l Fanta",5.99 → ["12345", "1,5l Fanta", "5.99"]
+     *   12345,Fanta,5.99        → ["12345", "Fanta", "5.99"]
+     * </pre>
+     */
+    private static String[] csvSatirParcala(String satir) {
+        char ayirici = satir.contains(";") ? ';' : ',';
+        List<String> alanlar = new ArrayList<>();
+        StringBuilder alan = new StringBuilder();
+        boolean tirnaklarici = false;
+
+        for (int i = 0; i < satir.length(); i++) {
+            char c = satir.charAt(i);
+            if (c == '"') {
+                tirnaklarici = !tirnaklarici;
+            } else if (c == ayirici && !tirnaklarici) {
+                alanlar.add(alan.toString());
+                alan.setLength(0);
+            } else {
+                alan.append(c);
+            }
+        }
+        alanlar.add(alan.toString()); // son alan
+        return alanlar.toArray(new String[0]);
     }
 
     // Programatik cache temizleme: self-invocation sorunundan kaçınmak için @CacheEvict yerine kullanılır

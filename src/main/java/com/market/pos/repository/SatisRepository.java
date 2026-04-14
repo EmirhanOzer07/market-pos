@@ -16,8 +16,8 @@ import java.util.List;
  */
 public interface SatisRepository extends JpaRepository<Satis, Long> {
 
-    /** Belirtilen kasiyere ait tüm satışları getirir. */
-    @Query("SELECT s FROM Satis s WHERE s.kullanici.id = :kullaniciId")
+    /** Belirtilen kasiyere ait son 500 satışı getirir (yıllarca birikim → OOM koruması). */
+    @Query("SELECT s FROM Satis s WHERE s.kullanici.id = :kullaniciId ORDER BY s.tarih DESC LIMIT 500")
     List<Satis> findAllByKullaniciId(@Param("kullaniciId") Long kullaniciId);
 
     // ── Anlık özet sorguları ──────────────────────────────────────────────────

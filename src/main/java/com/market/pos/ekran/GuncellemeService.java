@@ -32,7 +32,7 @@ public class GuncellemeService {
     private static final String GITHUB_REPO  = "market-pos";
 
     // ✏️ Her yeni release öncesi artır
-    public static final String MEVCUT_SURUM = "1.7.0";
+    public static final String MEVCUT_SURUM = "2.0.0";
 
     private static final String GITHUB_API_URL =
             "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/releases/latest";
@@ -141,7 +141,7 @@ public class GuncellemeService {
 
     public static void indir(String indirmeUrl, LongConsumer ilerlemeCB) throws Exception {
         Files.createDirectories(GUNCELLEME_KLASORU);
-        Path yeniJar = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
+        Path yeniJar = GUNCELLEME_KLASORU.resolve("OZRPos-yeni.jar");
 
         guncellemeyiLogla("İndirme başlıyor: " + indirmeUrl);
 
@@ -207,11 +207,34 @@ public class GuncellemeService {
      * @param yeniSurum  Yeni sürüm numarası (bat tarafından .installed_version'a yazılacak)
      */
     public static void guncellemeUygula(String yeniSurum) throws Exception {
-        Path yeniJar = GUNCELLEME_KLASORU.resolve("MarketPOS-yeni.jar");
+        // CWE-78: Bat script injection önlemi — sürüm yalnızca sayı ve nokta içermeli
+        if (yeniSurum == null || !yeniSurum.matches("^\\d+\\.\\d+(\\.\\d+)?$")) {
+            throw new IllegalArgumentException(
+                    "Geçersiz sürüm formatı (bat injection koruması): " + yeniSurum);
+        }
+
+        Path yeniJar = GUNCELLEME_KLASORU.resolve("OZRPos-yeni.jar");
         Path betik   = GUNCELLEME_KLASORU.resolve("guncelle.bat");
 
         if (!Files.exists(yeniJar)) {
             throw new IOException("İndirilen JAR bulunamadı: " + yeniJar);
+        }
+
+        // İndirilen JAR'ın geçerli bir ZIP/JAR dosyası olduğunu doğrula (magic bytes: PK)
+        byte[] magic = new byte[4];
+        try (java.io.InputStream is = Files.newInputStream(yeniJar)) {
+            int okunan = is.read(magic);
+            if (okunan < 4 || magic[0] != 0x50 || magic[1] != 0x4B) {
+                Files.deleteIfExists(yeniJar);
+                throw new IOException("İndirilen dosya geçerli bir JAR değil (bozuk indirme)!");
+            }
+        }
+
+        // Boyut kontrolü — 10MB'dan küçük JAR geçersiz
+        if (Files.size(yeniJar) < 10 * 1024 * 1024L) {
+            Files.deleteIfExists(yeniJar);
+            throw new IOException("İndirilen JAR çok küçük (eksik indirme)! Boyut: "
+                    + Files.size(yeniJar) + " byte");
         }
 
         // EXE yolu — hem launcher hem JAR konumu için kullanılır
@@ -272,8 +295,8 @@ public class GuncellemeService {
                 + "echo " + ts + " BAT: .installed_version yazildi: " + yeniSurum
                             + " >> \"" + logYolu + "\"\r\n"
 
-                // 4. Port 8080'i zorla boşalt (taskkill /F /IM MarketPOS.exe KULLANILMAZ
-                //    — cmd.exe MarketPOS.exe'nin child process'i olduğundan kendini öldürür)
+                // 4. Port 8080'i zorla boşalt (taskkill /F /IM OZRPos.exe KULLANILMAZ
+                //    — cmd.exe OZRPos.exe'nin child process'i olduğundan kendini öldürür)
                 + "for /f \"tokens=5\" %%a in ('netstat -ano ^| findstr :8080') do (\r\n"
                 + "  taskkill /F /PID %%a 2>nul\r\n"
                 + ")\r\n"
