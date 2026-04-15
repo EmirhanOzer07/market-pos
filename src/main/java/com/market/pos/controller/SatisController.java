@@ -40,7 +40,7 @@ public class SatisController {
 
     @PostMapping("/tamamla")
     @Transactional
-    public Map<String, Object> satisTamamla(@RequestBody SatisIstegi istek) {
+    public Map<String, Object> satisTamamla(@RequestBody @jakarta.validation.Valid SatisIstegi istek) {
 
         if (istek.getSepet() == null || istek.getSepet().isEmpty()) {
             throw new IllegalArgumentException("Sepet boş!");

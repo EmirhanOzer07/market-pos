@@ -16,6 +16,9 @@ import lombok.Setter;
 public class SepetUrunDTO {
 
     private Long id;
+
+    @jakarta.validation.constraints.NotBlank
+    @jakarta.validation.constraints.Size(max = 100)
     private String barkod;
 
     @NotNull(message = "Adet boş olamaz!")
