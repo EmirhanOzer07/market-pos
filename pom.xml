@@ -125,6 +125,9 @@
     </dependencies>
 
     <build>
+        <!-- JAR adı sabit kalır — OZRPos.cfg ve otomatik güncelleme bu ada bağlıdır -->
+        <finalName>pos-0.0.1-SNAPSHOT</finalName>
+
         <plugins>
 
             <!-- Spring Boot JAR oluşturucu -->
@@ -148,7 +151,7 @@
                 <version>1.6.5</version>
                 <configuration>
                     <name>OZRPos</name>
-                    <appVersion>1.0.0</appVersion>
+                    <appVersion>2.1.0</appVersion>
                     <vendor>OZR</vendor>
                     <destination>C:/OZRPos-build</destination>
                     <input>target/app-input</input>
@@ -159,7 +162,7 @@
                     <javaOptions>
                         <option>-Xmx256m</option>
                         <option>-Dfile.encoding=UTF-8</option>
-                        <option>-Djpackage.app-version=1.0.0</option>
+                        <option>-Djpackage.app-version=2.1.0</option>
                         <option>-Djava.awt.headless=false</option>
                     </javaOptions>
                 </configuration>
