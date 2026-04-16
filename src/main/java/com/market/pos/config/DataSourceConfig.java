@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 
 import javax.sql.DataSource;
 import java.io.*;
@@ -30,6 +31,7 @@ import java.sql.DriverManager;
  * Migrasyon: Eski şifresiz DB varsa SCRIPT/RUNSCRIPT ile otomatik şifreli formata geçirir.
  */
 @Configuration
+@Profile("!test")
 public class DataSourceConfig {
 
     private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
@@ -49,7 +51,18 @@ public class DataSourceConfig {
         return s;
     }
 
-    /** Eski şifresiz kurulumun varsayılan H2 şifresi (migrasyon için). */
+    /**
+     * v1.0-öncesi şifresiz H2 kurulumunun varsayılan kullanıcı şifresi.
+     *
+     * <p><b>Güvenlik notu:</b> Eski kurulumlar bu şifre ile H2 SQL kimlik doğrulaması
+     * yapıyordu. {@link #eskiDbMigrasyonuYap} metodu bu değeri yalnızca bir kez
+     * (AES migrasyonu sırasında) kullanır. Yeni kurulumlar
+     * {@code ConfigManager.ilkKurulumYap} ile rastgele UUID şifre alır.</p>
+     *
+     * @deprecated Yalnızca v1.0-öncesi → v1.x AES migrasyon yolu için kullanılır.
+     *             v2.0 yayımlandığında bu sabiti ve {@link #eskiDbMigrasyonuYap}'ı silin.
+     */
+    @Deprecated(since = "1.0", forRemoval = true)
     private static final String ESKI_DB_SIFRESI = "pos123";
 
     @Autowired

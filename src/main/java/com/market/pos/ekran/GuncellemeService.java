@@ -32,7 +32,7 @@ public class GuncellemeService {
     private static final String GITHUB_REPO  = "market-pos";
 
     // ✏️ Her yeni release öncesi artır
-    public static final String MEVCUT_SURUM = "2.0.0";
+    public static final String MEVCUT_SURUM = "2.1.0";
 
     private static final String GITHUB_API_URL =
             "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/releases/latest";

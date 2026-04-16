@@ -21,7 +21,22 @@ public final class ConfigManager {
             System.getProperty("user.home") + "/AppData/Local/MarketPOS";
 
     private static final String CONFIG_DOSYASI = APPDATA_DIR + "/config.properties";
-    private static final String UYGULAMA_VERSIYONU = "1.0.0";
+    private static final String UYGULAMA_VERSIYONU = "2.1.0";
+
+    /**
+     * v1.0 öncesi kurulumların DB_KULLANICI_SIFRESI değeri.
+     *
+     * <p><b>Güvenlik notu:</b> Kaynak kodda yazmak zorunda olduğumuz tek hardcoded değer
+     * bu migrasyondur — eski kurulumlar bu şifreyle şifreli H2 dosyasına sahiptir ve
+     * şifreyi bilmeden migrasyon yapılamaz. Yeni kurulumlar ({@link #ilkKurulumYap})
+     * rastgele UUID tabanlı şifre alır; bu sabit v2.0'da kaldırılacaktır.</p>
+     *
+     * @deprecated Yalnızca v1.0-öncesi → v1.x migrasyon yolu için kullanılır.
+     *             v2.0 yayımlandığında bu sabiti ve {@link #configYukle} içindeki
+     *             migrasyon bloğunu silin.
+     */
+    @Deprecated(since = "1.0", forRemoval = true)
+    private static final String LEGACY_DB_SIFRESI_V1 = "pos_db_2024!";
 
     private ConfigManager() {}
 
@@ -100,7 +115,8 @@ public final class ConfigManager {
         // aynı değeri config'e yazıyoruz. Artık kaynak kodda değil, config.properties'de.
         // Yeni kurulumlar ilkKurulumYap'ta rastgele değer alır.
         if (!props.containsKey("DB_KULLANICI_SIFRESI")) {
-            String eskiSifre = "pos_db_2024!"; // Eski hardcoded değer — sadece migrasyon için
+            @SuppressWarnings("deprecation")
+            String eskiSifre = LEGACY_DB_SIFRESI_V1; // v1.0-öncesi kurulum — migrasyon için
             props.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
             System.setProperty("DB_KULLANICI_SIFRESI", eskiSifre);
             try (OutputStream os = new FileOutputStream(configDosya)) {

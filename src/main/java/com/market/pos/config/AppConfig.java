@@ -1,6 +1,7 @@
 package com.market.pos.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
@@ -26,6 +27,7 @@ public class AppConfig {
     }
 
     @Bean
+    @ConditionalOnMissingBean(CacheManager.class)
     public CacheManager cacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager();
         // Kullanıcı bilgisi — her kullanıcı için 30 sn, en fazla 500 giriş

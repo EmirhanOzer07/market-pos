@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.logging.Logger;
 
 /**
  * Build-time yardımcı: OZR POS ikonunu ICO formatında üretir.
@@ -17,6 +18,8 @@ import java.nio.file.Paths;
  * Çıktı: target/icon.ico (jpackage için)
  */
 public class IconMaker {
+
+    private static final Logger log = Logger.getLogger(IconMaker.class.getName());
 
     public static void main(String[] args) throws Exception {
         Files.createDirectories(Paths.get("target"));
@@ -49,7 +52,7 @@ public class IconMaker {
             out.write(png);
         }
 
-        System.out.println("[IconMaker] target/icon.ico oluşturuldu — " + png.length + " byte");
+        log.info("[IconMaker] target/icon.ico oluşturuldu — " + png.length + " byte");
     }
 
     // =========================================================

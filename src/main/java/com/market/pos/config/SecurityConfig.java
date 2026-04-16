@@ -27,7 +27,7 @@ import java.util.List;
 public class SecurityConfig {
 
     @Autowired private JwtFilter jwtFilter;
-    @Autowired private RateLimitFilter rateLimitFilter;
+    @Autowired(required = false) private RateLimitFilter rateLimitFilter;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -46,8 +46,10 @@ public class SecurityConfig {
                         })
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        if (rateLimitFilter != null) {
+            http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
+        }
 
         return http.build();
     }

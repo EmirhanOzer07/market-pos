@@ -15,7 +15,7 @@
 
     <groupId>com.market</groupId>
     <artifactId>pos</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>2.1.0</version>
 
     <properties>
         <java.version>21</java.version>

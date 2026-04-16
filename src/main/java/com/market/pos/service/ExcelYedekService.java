@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * Ürün listesini her gece 23:59'da .xlsx formatında yedekler.
+ * Ürün listesini her gece 22:00'de .xlsx formatında yedekler.
  *
  * Her market için ayrı sayfa + "Tüm Ürünler" özet sayfası.
  * Klasörde en fazla 20 dosya saklanır (dönen yedekleme).
@@ -49,6 +49,14 @@ public class ExcelYedekService {
     @Autowired private UrunRepository   urunRepository;
     @Autowired private MarketRepository marketRepository;
 
+    /**
+     * Self-invocation bypass fix: @Transactional çalışması için bean'in kendi
+     * proxy'si üzerinden çağırılması gerekir. @Lazy olmadan circular dependency
+     * oluşur; @Lazy ile proxy hazır olduktan sonra enjekte edilir.
+     */
+    @Autowired @Lazy
+    private ExcelYedekService self;
+
     // ─────────────────────────────────────────────
     // Başlangıç kontrolü — bugün Excel yedeği yoksa al
     // ─────────────────────────────────────────────
@@ -63,10 +71,10 @@ public class ExcelYedekService {
             if (bugunYedekleri == null || bugunYedekleri.length == 0) {
                 log.info("[EXCEL YEDEK] Bugün için Excel yedeği yok, alınıyor...");
                 try {
-                    Path hedef = excelYedekAl();
+                    Path hedef = self.excelYedekAl();
                     log.info("[EXCEL YEDEK] ✓ Başlangıç yedeği alındı: {}", hedef.getFileName());
                 } catch (Exception e) {
-                    log.warn("[EXCEL YEDEK] Başlangıç yedeği alınamadı: {}", e.getMessage());
+                    log.warn("[EXCEL YEDEK] Başlangıç yedeği alınamadı: {}", e.getMessage(), e);
                 }
             } else {
                 log.info("[EXCEL YEDEK] Bugün için Excel yedeği mevcut: {}", bugunYedekleri[0].getName());
@@ -75,13 +83,13 @@ public class ExcelYedekService {
     }
 
     // ─────────────────────────────────────────────
-    // Zamanlayıcı — her gece 23:59
+    // Zamanlayıcı — her gece 22:00 (market kapanış saati)
     // ─────────────────────────────────────────────
-    @Scheduled(cron = "0 59 23 * * *")
+    @Scheduled(cron = "0 0 22 * * *")
     public void gunlukExcelYedegi() {
         log.info("[EXCEL YEDEK] Otomatik günlük yedek başlıyor...");
         try {
-            Path hedef = excelYedekAl();
+            Path hedef = self.excelYedekAl();
             log.info("[EXCEL YEDEK] ✓ Tamamlandı: {}", hedef.getFileName());
         } catch (Exception e) {
             log.error("[EXCEL YEDEK] Günlük yedek alınamadı: {}", e.getMessage(), e);
@@ -100,6 +108,11 @@ public class ExcelYedekService {
         Path hedef   = klasor.resolve("urunler_" + tarih + ".xlsx");
 
         List<Market> marketler = marketRepository.findAll();
+
+        if (marketler.isEmpty()) {
+            log.info("[EXCEL YEDEK] Henüz market kaydı yok, yedek atlandı.");
+            throw new IllegalStateException("Yedeklenecek market bulunamadı.");
+        }
 
         // XSSFWorkbook try-with-resources garantisi: hem workbook hem OutputStream
         // kapatılır — bellek sızıntısı ve dosya kilidi riski yok.

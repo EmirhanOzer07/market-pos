@@ -20,6 +20,11 @@ target/
 patron.hash
 config.properties
 
+# Environment variable files (CI/CD secrets, local overrides)
+.env
+.env.*
+!.env.example
+
 # Log files
 *.log
 logs/
@@ -88,3 +93,6 @@ desktop.ini
 # Claude Code (AI assistant config — local only)
 # ============================================================
 .claude/
+
+# Spring Initializr boilerplate (not part of the project)
+HELP.md
