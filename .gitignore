@@ -96,3 +96,6 @@ desktop.ini
 
 # Spring Initializr boilerplate (not part of the project)
 HELP.md
+
+# Developer build scripts (local only)
+build-package.bat
