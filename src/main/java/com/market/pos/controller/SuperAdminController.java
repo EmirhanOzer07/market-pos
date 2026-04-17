@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.*;
 import com.market.pos.security.AuditLogger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -45,7 +45,7 @@ public class SuperAdminController {
             System.getProperty("user.home"),
             "AppData", "Local", "MarketPOS", "patron.cfg");
 
-    @Value("${patron.server.url}")
+    /** Railway sunucu URL — patron.cfg'den yüklenir. */
     private String patronServerUrl;
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
@@ -69,14 +69,17 @@ public class SuperAdminController {
                 apiKey = null;
                 return;
             }
-            String okunan = Files.readString(CFG_DOSYASI, StandardCharsets.UTF_8).trim();
-            if (okunan.startsWith("\uFEFF")) okunan = okunan.substring(1);
-            if (okunan.isBlank()) {
-                log.error("[PATRON] patron.cfg bos | Patron paneli devre disi.");
+            Properties props = new Properties();
+            try (InputStream is = Files.newInputStream(CFG_DOSYASI)) {
+                props.load(is);
+            }
+            apiKey = props.getProperty("api.key");
+            patronServerUrl = props.getProperty("server.url");
+            if (apiKey == null || apiKey.isBlank() || patronServerUrl == null || patronServerUrl.isBlank()) {
+                log.error("[PATRON] patron.cfg eksik alanlar (api.key / server.url) | Patron paneli devre disi.");
                 apiKey = null;
                 return;
             }
-            apiKey = okunan;
             patronCfgGuvenliginisAyarla();
             log.info("[PATRON] Yapilandirma yuklendi.");
         } catch (IOException e) {
