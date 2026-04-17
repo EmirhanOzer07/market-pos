@@ -4,6 +4,8 @@ Küçük ve orta ölçekli marketler için geliştirilmiş, güvenli ve internet
 
 > A secure, offline-first Point of Sale system for retail stores. Built with Spring Boot + JavaFX as a standalone desktop application — no internet required for daily operations.
 
+[![CI](https://github.com/EmirhanOzer07/market-pos/actions/workflows/ci.yml/badge.svg)](https://github.com/EmirhanOzer07/market-pos/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-2.1.0-blue)
 ![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-brightgreen?logo=springboot)
 ![JavaFX](https://img.shields.io/badge/JavaFX-21-blue?logo=java)

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 21 (Temurin) kur
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Testleri çalıştır ve JAR paketle
+        run: mvn package
+        env:
+          # AWT / JavaFX gerçek ekran gerektirmesin; test ortamında display yok
+          JAVA_TOOL_OPTIONS: -Djava.awt.headless=true
+
+      - name: Test raporu yükle (başarısız olursa görüntüle)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
