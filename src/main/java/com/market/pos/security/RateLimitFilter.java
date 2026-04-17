@@ -58,7 +58,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         boolean isProtectedUri = uri.equals("/api/auth/giris") ||
                 uri.equals("/api/auth/kayit") ||
-                uri.equals("/api/superadmin/davetiye-uret");
+                uri.equals("/api/superadmin/davetiye-uret") ||
+                uri.equals("/api/superadmin/dogrula");
 
         if (!isProtectedUri) {
             filterChain.doFilter(request, response);

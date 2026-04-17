@@ -108,159 +108,165 @@ public class UrunController {
             throw new IllegalArgumentException("Dosya 5MB'dan büyük olamaz!");
         }
 
-        // CWE-434: MIME type kontrolü — uzantı spoofing'e karşı ek güvence
-        // Not: farklı OS/tarayıcılar aynı CSV için farklı MIME gönderebilir, izin verilenler geniş tutuldu
+        // CWE-434: MIME type kontrolü — application/octet-stream kasıtlı olarak kabul edilmez
         String contentType = dosya.getContentType();
         if (contentType != null) {
             String tip = contentType.toLowerCase().split(";")[0].trim();
-            boolean izinli = tip.equals("text/csv")
-                    || tip.equals("text/plain")
-                    || tip.equals("application/csv")
-                    || tip.equals("application/vnd.ms-excel")
-                    || tip.equals("application/octet-stream");
+            boolean izinli = tip.equals("text/csv") || tip.equals("text/plain");
             if (!izinli) {
                 throw new IllegalArgumentException(
                         "Geçersiz dosya türü (" + tip + "). Sadece CSV/TXT kabul edilir.");
             }
         }
 
-        Market market = marketRepository.findById(marketId).orElseThrow();
-
-        // Projeksiyon — sadece çakışma tespiti için gerekli alanlar yüklenir (id, barkod, isim, fiyat)
-        Map<String, UrunRepository.UrunCakismaProje> mevcutUrunHaritasi =
-                urunRepository.findCakismaProjeByMarketId(marketId)
-                        .stream()
-                        .collect(Collectors.toMap(UrunRepository.UrunCakismaProje::getBarkod, u -> u));
-
-        Map<String, Urun> sonucHaritasi = new HashMap<>();
-
-        int eklenenCount = 0;
-        int guncellenenCount = 0;
-        List<String> hatalar = new ArrayList<>();
-        // Çakışma: aynı barkod, farklı isim veya fiyat — frontend kullanıcıya sorar
-        List<Map<String, Object>> cakismalar = new ArrayList<>();
-        // Çakışma barkodlarını takip et — saveAll'dan hariç tut
-        java.util.Set<String> cakismaBarkodelari = new java.util.HashSet<>();
-
+        // ── Satırları belleğe al (max 5 MB, ~10.000 satır) ──────────────────────
+        List<String> tumSatirlar;
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(dosya.getInputStream(), StandardCharsets.UTF_8))) {
-
+            tumSatirlar = new ArrayList<>();
             String satir;
-            boolean ilkSatir = true;
             int satirNo = 0;
-
             while ((satir = br.readLine()) != null) {
                 satirNo++;
-
-                // Satır sınır kontrolü try-catch bloğu dışında — hata yutulmasını önler
-                // Artık exception yutulmuyor, döngü gerçekten duruyor
                 if (satirNo > MAX_SATIR + 1) {
                     throw new IllegalArgumentException(
-                            "Dosya çok büyük! Maksimum " + MAX_SATIR + " ürün yüklenebilir."
-                    );
+                            "Dosya çok büyük! Maksimum " + MAX_SATIR + " ürün yüklenebilir.");
                 }
-
-                if (ilkSatir) { ilkSatir = false; continue; }
-                if (satir.trim().isEmpty()) continue;
-
-                try {
-                    String[] s = csvSatirParcala(satir);
-                    if (s.length < 3) {
-                        hatalar.add("Satır " + satirNo + ": Eksik sütun (Barkod;İsim;Fiyat bekleniyor)");
-                        continue;
-                    }
-
-                    String barkod = s[0].trim();
-                    String isim = s[1].trim();
-
-                    if (barkod.isEmpty() || isim.isEmpty()) {
-                        hatalar.add("Satır " + satirNo + ": Barkod veya isim alanı boş");
-                        continue;
-                    }
-                    if (barkod.length() > 100) {
-                        hatalar.add("Satır " + satirNo + ": Barkod çok uzun (max 100 karakter)");
-                        continue;
-                    }
-                    if (isim.length() > 255) {
-                        hatalar.add("Satır " + satirNo + ": Ürün adı çok uzun (max 255 karakter)");
-                        continue;
-                    }
-
-                    BigDecimal fiyat;
-                    try {
-                        fiyat = new BigDecimal(s[2].trim().replace(",", "."));
-                    } catch (Exception e) {
-                        hatalar.add("Satır " + satirNo + ": Geçersiz fiyat formatı -> " + s[2]);
-                        continue;
-                    }
-
-                    if (fiyat.compareTo(BigDecimal.ZERO) < 0) {
-                        hatalar.add("Satır " + satirNo + ": Fiyat negatif olamaz");
-                        continue;
-                    }
-
-                    if (cakismaBarkodelari.contains(barkod)) {
-                        // Bu barkod çakışmalı — atla
-                        continue;
-                    } else if (sonucHaritasi.containsKey(barkod)) {
-                        // Aynı CSV'de tekrar geçen barkod — son değeri kullan
-                        Urun tekrar = sonucHaritasi.get(barkod);
-                        tekrar.setIsim(isim);
-                        tekrar.setFiyat(fiyat);
-                        continue;
-                    } else if (mevcutUrunHaritasi.containsKey(barkod)) {
-                        UrunRepository.UrunCakismaProje mevcut = mevcutUrunHaritasi.get(barkod);
-                        boolean ayniIsim  = isim.equals(mevcut.getIsim());
-                        boolean ayniFiyat = fiyat.compareTo(mevcut.getFiyat()) == 0;
-
-                        if (ayniIsim && ayniFiyat) {
-                            // Birebir aynı → atla
-                            continue;
-                        } else {
-                            // Farklı → çakışma, frontend soracak
-                            Map<String, Object> c = new HashMap<>();
-                            c.put("id",       mevcut.getId());
-                            c.put("barkod",   barkod);
-                            c.put("dbIsim",   mevcut.getIsim());
-                            c.put("dbFiyat",  mevcut.getFiyat());
-                            c.put("csvIsim",  isim);
-                            c.put("csvFiyat", fiyat);
-                            cakismalar.add(c);
-                            cakismaBarkodelari.add(barkod);
-                            continue;
-                        }
-                    } else {
-                        Urun yeni = new Urun();
-                        yeni.setBarkod(barkod);
-                        yeni.setIsim(isim);
-                        yeni.setFiyat(fiyat);
-                        yeni.setMarket(market);
-                        eklenenCount++;
-                        sonucHaritasi.put(barkod, yeni);
-                    }
-
-                } catch (Exception e) {
-                    hatalar.add("Satır " + satirNo + ": Beklenmeyen hata -> " + e.getMessage());
-                }
+                tumSatirlar.add(satir);
             }
-
-            if (!sonucHaritasi.isEmpty()) {
-                urunRepository.saveAll(sonucHaritasi.values());
-            }
-
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Dosya okunurken kritik hata: " + e.getMessage());
         }
 
+        // ── 1. Geçiş: CSV'deki barkodları topla ─────────────────────────────────
+        // Tüm market ürünleri yerine yalnızca CSV'deki barkodlar sorgulanır — O(n) → O(k)
+        java.util.Set<String> csvBarkodlar = new java.util.HashSet<>();
+        boolean ilkSatirTara = true;
+        for (String satir : tumSatirlar) {
+            if (ilkSatirTara) { ilkSatirTara = false; continue; }
+            if (satir.trim().isEmpty()) continue;
+            String[] s = csvSatirParcala(satir);
+            if (s.length >= 1 && !s[0].trim().isEmpty()) {
+                csvBarkodlar.add(s[0].trim());
+            }
+        }
+
+        Market market = marketRepository.findById(marketId).orElseThrow();
+        Map<String, UrunRepository.UrunCakismaProje> mevcutUrunHaritasi =
+                csvBarkodlar.isEmpty() ? new HashMap<>() :
+                urunRepository.findCakismaProjeByBarkodlarAndMarketId(
+                        new ArrayList<>(csvBarkodlar), marketId)
+                        .stream()
+                        .collect(Collectors.toMap(UrunRepository.UrunCakismaProje::getBarkod, u -> u));
+
+        // ── 2. Geçiş: Satırları işle ─────────────────────────────────────────────
+        Map<String, Urun> sonucHaritasi = new HashMap<>();
+        int eklenenCount = 0;
+        int satirSayisi  = 0; // Gerçek işlenen satır sayısı (başlık ve boş satırlar hariç)
+        List<String> hatalar = new ArrayList<>();
+        List<Map<String, Object>> cakismalar = new ArrayList<>();
+        java.util.Set<String> cakismaBarkodelari = new java.util.HashSet<>();
+
+        boolean ilkSatir = true;
+        int satirNo = 0;
+
+        for (String satir : tumSatirlar) {
+            satirNo++;
+            if (ilkSatir) { ilkSatir = false; continue; }
+            if (satir.trim().isEmpty()) continue;
+            satirSayisi++;
+
+            try {
+                String[] s = csvSatirParcala(satir);
+                if (s.length < 3) {
+                    hatalar.add("Satır " + satirNo + ": Eksik sütun (Barkod;İsim;Fiyat bekleniyor)");
+                    continue;
+                }
+
+                String barkod = s[0].trim();
+                String isim   = s[1].trim();
+
+                if (barkod.isEmpty() || isim.isEmpty()) {
+                    hatalar.add("Satır " + satirNo + ": Barkod veya isim alanı boş");
+                    continue;
+                }
+                if (barkod.length() > 100) {
+                    hatalar.add("Satır " + satirNo + ": Barkod çok uzun (max 100 karakter)");
+                    continue;
+                }
+                if (isim.length() > 255) {
+                    hatalar.add("Satır " + satirNo + ": Ürün adı çok uzun (max 255 karakter)");
+                    continue;
+                }
+
+                BigDecimal fiyat;
+                try {
+                    fiyat = new BigDecimal(s[2].trim().replace(",", "."));
+                } catch (Exception e) {
+                    hatalar.add("Satır " + satirNo + ": Geçersiz fiyat formatı -> " + s[2]);
+                    continue;
+                }
+
+                if (fiyat.compareTo(BigDecimal.ZERO) < 0) {
+                    hatalar.add("Satır " + satirNo + ": Fiyat negatif olamaz");
+                    continue;
+                }
+
+                if (cakismaBarkodelari.contains(barkod)) {
+                    continue;
+                } else if (sonucHaritasi.containsKey(barkod)) {
+                    // Aynı CSV'de tekrar geçen barkod — son değeri kullan
+                    Urun tekrar = sonucHaritasi.get(barkod);
+                    tekrar.setIsim(isim);
+                    tekrar.setFiyat(fiyat);
+                    continue;
+                } else if (mevcutUrunHaritasi.containsKey(barkod)) {
+                    UrunRepository.UrunCakismaProje mevcut = mevcutUrunHaritasi.get(barkod);
+                    boolean ayniIsim  = isim.equals(mevcut.getIsim());
+                    boolean ayniFiyat = fiyat.compareTo(mevcut.getFiyat()) == 0;
+
+                    if (ayniIsim && ayniFiyat) {
+                        continue; // Birebir aynı → atlanan sayısına dahil edilir
+                    } else {
+                        Map<String, Object> c = new HashMap<>();
+                        c.put("id",       mevcut.getId());
+                        c.put("barkod",   barkod);
+                        c.put("dbIsim",   mevcut.getIsim());
+                        c.put("dbFiyat",  mevcut.getFiyat());
+                        c.put("csvIsim",  isim);
+                        c.put("csvFiyat", fiyat);
+                        cakismalar.add(c);
+                        cakismaBarkodelari.add(barkod);
+                        continue;
+                    }
+                } else {
+                    Urun yeni = new Urun();
+                    yeni.setBarkod(barkod);
+                    yeni.setIsim(isim);
+                    yeni.setFiyat(fiyat);
+                    yeni.setMarket(market);
+                    eklenenCount++;
+                    sonucHaritasi.put(barkod, yeni);
+                }
+
+            } catch (Exception e) {
+                hatalar.add("Satır " + satirNo + ": Beklenmeyen hata -> " + e.getMessage());
+            }
+        }
+
+        if (!sonucHaritasi.isEmpty()) {
+            urunRepository.saveAll(sonucHaritasi.values());
+        }
+
         Map<String, Object> response = new HashMap<>();
-        response.put("eklenen", eklenenCount);
-        response.put("guncellenen", guncellenenCount);
-        response.put("hataSayisi", hatalar.size());
-        response.put("hatalar", hatalar);
-        response.put("toplamIslem", eklenenCount + guncellenenCount);
-        response.put("cakismalar", cakismalar);
+        response.put("eklenen",     eklenenCount);
+        response.put("guncellenen", 0); // Bu endpoint direkt güncelleme yapmaz; çakışmalar frontend'de çözülür
+        response.put("hataSayisi",  hatalar.size());
+        response.put("hatalar",     hatalar);
+        response.put("toplamIslem", satirSayisi); // Gerçek işlenen satır sayısı — "Atlanan" hesabı doğru olur
+        response.put("cakismalar",  cakismalar);
         yedekService.yedekAl("toplu_yukleme");
         return response;
     }

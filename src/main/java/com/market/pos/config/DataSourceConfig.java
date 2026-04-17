@@ -17,7 +17,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.zip.*;
-import java.sql.DriverManager;
 
 /**
  * AES-256 şifreli H2 veritabanı bağlantısını yapılandırır.
@@ -51,20 +50,6 @@ public class DataSourceConfig {
         return s;
     }
 
-    /**
-     * v1.0-öncesi şifresiz H2 kurulumunun varsayılan kullanıcı şifresi.
-     *
-     * <p><b>Güvenlik notu:</b> Eski kurulumlar bu şifre ile H2 SQL kimlik doğrulaması
-     * yapıyordu. {@link #eskiDbMigrasyonuYap} metodu bu değeri yalnızca bir kez
-     * (AES migrasyonu sırasında) kullanır. Yeni kurulumlar
-     * {@code ConfigManager.ilkKurulumYap} ile rastgele UUID şifre alır.</p>
-     *
-     * @deprecated Yalnızca v1.0-öncesi → v1.x AES migrasyon yolu için kullanılır.
-     *             v2.0 yayımlandığında bu sabiti ve {@link #eskiDbMigrasyonuYap}'ı silin.
-     */
-    @Deprecated(since = "1.0", forRemoval = true)
-    private static final String ESKI_DB_SIFRESI = "pos123";
-
     @Autowired
     private VeriTabaniAnahtarService anahtarService;
 
@@ -93,9 +78,6 @@ public class DataSourceConfig {
                 try { Files.deleteIfExists(RESTORE_FLAG); } catch (Exception ignored) {}
             }
         }
-
-        // Eski şifresiz DB varsa şifreli formata geçir
-        eskiDbMigrasyonuYap(dbYolu, dosyaAnahtari);
 
         HikariConfig config = new HikariConfig();
         // CIPHER=AES: veritabanı dosyaları AES-256 ile şifrelenir
@@ -189,6 +171,7 @@ public class DataSourceConfig {
         String sqlYolu  = tempSql.toString().replace("\\", "/");
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(jdbcUrl, "pos", sifre);
              java.sql.Statement stmt  = conn.createStatement()) {
+            // sqlYolu = AppData altındaki geçici dosya — kullanıcı girdisi değil, path traversal riski yok
             stmt.execute("RUNSCRIPT FROM '" + sqlYolu + "'");
             log.info("[GERİ YÜKLEME] ✓ Geri yükleme başarıyla tamamlandı!");
         } catch (Exception e) {
@@ -217,66 +200,4 @@ public class DataSourceConfig {
         }
     }
 
-    /**
-     * Şifresiz eski veritabanını AES şifreli formata geçirir.
-     *
-     * Tetikleyici: Anahtar bu oturumda yeni oluşturulduysa (ilk kurulum veya kayıp anahtar)
-     * VE veri.mv.db mevcut ise → eski şifresiz kurulum → migrasyon gerekli.
-     *
-     * Adımlar:
-     *   1. Şifresiz DB'ye bağlan, tüm veriyi SQL dosyasına aktar (SCRIPT TO)
-     *   2. Eski .mv.db ve .trace.db dosyalarını sil
-     *   3. Şifreli DB'ye bağlan, SQL dosyasından veriyi yükle (RUNSCRIPT FROM)
-     *   4. Geçici SQL dosyasını sil
-     */
-    private void eskiDbMigrasyonuYap(String dbYolu, String dosyaAnahtari) {
-        // Anahtar önceden varsa migrasyon gerekmiyor (daha önce yapılmış)
-        if (!anahtarService.anahtarYeniOlusturulduMu()) return;
-
-        Path mvDbDosyasi = Paths.get(dbYolu.replace("/", "\\") + ".mv.db");
-        if (!Files.exists(mvDbDosyasi)) return; // Fresh install, şifresiz DB yok
-
-        log.info("[MİGRASYON] Şifresiz veritabanı tespit edildi, AES şifreli formata geçiriliyor...");
-
-        Path sqlDosyasi = Paths.get(System.getProperty("user.home"),
-                "AppData", "Local", "MarketPOS", "migrasyon_temp.sql");
-
-        String eskiUrl   = "jdbc:h2:file:" + dbYolu;
-        String yeniUrl   = "jdbc:h2:file:" + dbYolu + ";CIPHER=AES";
-        String yeniSifre = dosyaAnahtari + " " + dbKullaniciSifresi();
-        String sqlYolu   = sqlDosyasi.toString().replace("\\", "/");
-
-        try {
-            // 1. Şifresiz DB'yi SQL dosyasına aktar
-            log.info("[MİGRASYON] Adım 1/3 — Veriler dışa aktarılıyor...");
-            try (var conn = DriverManager.getConnection(eskiUrl, "pos", ESKI_DB_SIFRESI);
-                 var stmt = conn.createStatement()) {
-                stmt.execute("SCRIPT TO '" + sqlYolu + "'");
-            }
-
-            // 2. Eski şifresiz dosyaları sil
-            log.info("[MİGRASYON] Adım 2/3 — Eski dosyalar siliniyor...");
-            Files.deleteIfExists(Paths.get(dbYolu.replace("/", "\\") + ".mv.db"));
-            Files.deleteIfExists(Paths.get(dbYolu.replace("/", "\\") + ".trace.db"));
-
-            // 3. Şifreli DB'ye veriyi yükle
-            log.info("[MİGRASYON] Adım 3/3 — Şifreli veritabanına yükleniyor...");
-            try (var conn = DriverManager.getConnection(yeniUrl, "pos", yeniSifre);
-                 var stmt = conn.createStatement()) {
-                stmt.execute("RUNSCRIPT FROM '" + sqlYolu + "'");
-            }
-
-            // 4. Geçici SQL dosyasını temizle
-            Files.deleteIfExists(sqlDosyasi);
-
-            log.info("[MİGRASYON] ✓ Tamamlandı — veritabanı artık AES-256 şifreli!");
-
-        } catch (Exception e) {
-            log.error("[MİGRASYON] HATA — migrasyon başarısız: {}", e.getMessage(), e);
-            try { Files.deleteIfExists(sqlDosyasi); } catch (Exception ignored) {}
-            throw new RuntimeException(
-                    "Veritabanı AES migrasyonu başarısız! Yedekleri kontrol edin: "
-                    + e.getMessage(), e);
-        }
-    }
 }

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import com.market.pos.security.AuditLogger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -44,8 +45,8 @@ public class SuperAdminController {
             System.getProperty("user.home"),
             "AppData", "Local", "MarketPOS", "patron.cfg");
 
-    private static final String PATRON_SERVER_URL =
-            "https://marketpos-patron-server-production.up.railway.app/patron/dogrula";
+    @Value("${patron.server.url}")
+    private String patronServerUrl;
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -123,7 +124,7 @@ public class SuperAdminController {
             String json = MAPPER.writeValueAsString(Map.of("sifre", sifre));
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(PATRON_SERVER_URL))
+                    .uri(URI.create(patronServerUrl))
                     .header("Content-Type", "application/json")
                     .header("x-api-key", apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(json))
@@ -154,7 +155,7 @@ public class SuperAdminController {
     }
 
     @PostMapping("/dogrula")
-    public Map<String, Object> dogrula(
+    public ResponseEntity<Map<String, Object>> dogrula(
             @RequestBody DavetiyeUretIstek istek,
             HttpServletRequest request) {
 
@@ -163,19 +164,19 @@ public class SuperAdminController {
         if (!yerelErisimMi(request)) {
             response.put("basarili", false);
             response.put("mesaj", "Sadece yerel erisim!");
-            return response;
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
         }
 
         if (istek.getSifresi() == null || istek.getSifresi().isBlank()) {
             response.put("basarili", false);
             response.put("mesaj", "Sifre bos olamaz!");
-            return response;
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
 
         if (apiKey == null) {
             response.put("basarili", false);
             response.put("mesaj", "Patron paneli bu cihazda yapilandirilmamis!");
-            return response;
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
         }
 
         boolean dogru = sifreDogrula(istek.getSifresi());
@@ -184,8 +185,9 @@ public class SuperAdminController {
 
         if (!dogru) {
             auditLogger.logFailedAdminAttempt(request.getRemoteAddr(), "Patron dogrulama basarisiz");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
-        return response;
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/davetiye-uret")

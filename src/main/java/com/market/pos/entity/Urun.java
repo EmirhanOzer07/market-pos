@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.Filter;
@@ -43,6 +44,8 @@ public class Urun {
 
     /** Ürün barkodu (EAN-13, QR vb.). Market içinde benzersizdir. */
     @NotBlank(message = "Barkod alanı boş bırakılamaz!")
+    @Size(max = 100, message = "Barkod 100 karakterden uzun olamaz!")
+    @Column(length = 100)
     private String barkod;
 
     /** Ürünün görünen adı. */

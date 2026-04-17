@@ -28,6 +28,14 @@ public interface UrunRepository extends JpaRepository<Urun, Long> {
     java.util.List<UrunCakismaProje> findCakismaProjeByMarketId(
         @org.springframework.data.repository.query.Param("marketId") Long marketId);
 
+    /** CSV yüklemesinde yalnızca CSV'deki barkodları sorgular — tüm market ürünleri yüklenmez. */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT u.id AS id, u.barkod AS barkod, u.isim AS isim, u.fiyat AS fiyat " +
+        "FROM Urun u WHERE u.barkod IN :barkodlar AND u.market.id = :marketId")
+    java.util.List<UrunCakismaProje> findCakismaProjeByBarkodlarAndMarketId(
+        @org.springframework.data.repository.query.Param("barkodlar") java.util.List<String> barkodlar,
+        @org.springframework.data.repository.query.Param("marketId") Long marketId);
+
     /** Barkod ve market ID'sine göre tek bir ürün döndürür. Satış doğrulamasında kullanılır. */
     Urun findByBarkodAndMarketId(String barkod, Long marketId);
 
