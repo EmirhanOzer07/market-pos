@@ -193,29 +193,25 @@ Yedekler varsayılan olarak `%LOCALAPPDATA%\MarketPOS\yedek\` altında saklanır
 
 ---
 
-## Müşteri Kurulumu
+## İndirme / Download
 
-1. `OZRPos/` klasörünü müşteri bilgisayarına kopyalayın.
-2. `OZRPos.exe`'yi çalıştırın.
-3. Patron panelinden üretilen davetiye koduyla kayıt olun.
+> Uygulamayı kullanmak için lisans gereklidir. Aşağıdaki iletişim bilgilerinden ulaşın.
 
-Sonraki güncellemeler GitHub Releases'dan otomatik indirilip kurulur.
+1. [Releases](https://github.com/EmirhanOzer07/market-pos/releases/latest) sayfasından `OZRPos-vX.Y.Z.zip` dosyasını indirin
+2. ZIP'i istediğiniz bir klasöre çıkarın
+3. `OZRPos.exe`'yi çalıştırın
+4. Tarafınıza iletilen davetiye koduyla kayıt olun
+5. Sonraki güncellemeler uygulama tarafından otomatik olarak indirilir — tekrar kurulum gerekmez
+
+**Sistem Gereksinimi:** Windows 10/11 (64-bit) — Java kurulumu gerekmez
 
 ---
 
-## Legacy Migrasyon Notu
+## İletişim / Contact
 
-v1.0 öncesi kurulumlar şifresiz H2 veritabanı kullanıyordu. v1.x'e ilk geçişte:
+Lisans ve kurulum için:
 
-1. Uygulama şifresiz `.mv.db` dosyasını tespit eder.
-2. Tüm veriyi geçici SQL script'e aktarır.
-3. Şifresiz dosyaları siler.
-4. Veriyi yeni AES-256 şifreli veritabanına yükler.
-5. Geçici dosyaları temizler.
-
-Migrasyon otomatik ve kullanıcıya şeffaf olarak çalışır.
-
-> **v2.0 Planı:** v1.0-öncesi kurulumlar desteklenmediğinde `ConfigManager.LEGACY_DB_SIFRESI_V1`, `DataSourceConfig.ESKI_DB_SIFRESI` ve `eskiDbMigrasyonuYap` metodunu silin.
+**E-posta:** emirhann0077@gmail.com
 
 ---
 
