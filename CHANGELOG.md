@@ -4,6 +4,29 @@ OZR POS sürüm geçmişi. [Keep a Changelog](https://keepachangelog.com/) forma
 
 ---
 
+## [2.1.1] — 2026-04-17
+
+### Güvenlik
+- `ConfigManager`: Hardcoded legacy şifre (`pos_db_2024!`) kaynak kodundan kaldırıldı
+- `DataSourceConfig`: Hardcoded legacy şifre (`pos123`) ve eski migrasyon kodu kaldırıldı
+- `SuperAdminController`: Production sunucu URL'i kaynak kodundan çıkarıldı (`application.properties`'e taşındı)
+- `RateLimitFilter`: `/api/superadmin/dogrula` endpoint'i brute-force koruması kapsamına alındı
+- `SuperAdminController`: Başarısız patron girişine HTTP 200 yerine doğru HTTP durum kodları (401/403/503)
+- `UrunController`: MIME validasyonundan `application/octet-stream` kaldırıldı
+
+### Performans
+- `UrunController.topluUrunYukle`: CSV yüklemesinde tüm ürünler yerine yalnızca CSV'deki barkodlar sorgulanıyor (iki geçişli yaklaşım)
+- `UrunRepository`: `findCakismaProjeByBarkodlarAndMarketId` eklendi
+
+### Düzeltmeler
+- `UrunController`: `toplamIslem` artık gerçek işlenen satır sayısını döndürüyor — frontend "Atlanan" sayısı doğru hesaplanıyor
+
+### Temizlik
+- `ConfigManager`: `System.err.println` → SLF4J logger
+- `Urun`: `barkod` alanına `@Size(max=100)` + `@Column(length=100)` eklendi
+
+---
+
 ## [2.1.0] — 2026-04-16
 
 ### Eklendi

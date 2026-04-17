@@ -26,7 +26,7 @@ public final class ConfigManager {
             System.getProperty("user.home") + "/AppData/Local/MarketPOS";
 
     private static final String CONFIG_DOSYASI = APPDATA_DIR + "/config.properties";
-    private static final String UYGULAMA_VERSIYONU = "2.1.0";
+    private static final String UYGULAMA_VERSIYONU = "2.1.1";
 
     private ConfigManager() {}
 
