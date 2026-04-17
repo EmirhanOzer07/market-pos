@@ -4,6 +4,14 @@ OZR POS sürüm geçmişi. [Keep a Changelog](https://keepachangelog.com/) forma
 
 ---
 
+## [2.1.2] — 2026-04-18
+
+### Güvenlik
+- `SuperAdminController`: Patron sunucu URL'i `application.properties`'den kaldırıldı; artık yalnızca `patron.cfg`'den okunuyor (git'e girmiyor)
+- `patron.cfg` formatı güncellendi: `api.key=` ve `server.url=` alanlarına ayrıldı
+
+---
+
 ## [2.1.1] — 2026-04-17
 
 ### Güvenlik
